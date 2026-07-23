@@ -98,7 +98,7 @@ D:\wx_jztz/
 
 - [微信开发者工具](https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html)（建议 1.05.2111300+）
 - 基础库选择 2.20.1+
-- 项目 AppID: `wx298fb8f8da10f5a0`
+- 项目 AppID: `your_app_id`
 
 ### 2. 打开项目
 
@@ -110,7 +110,7 @@ D:\wx_jztz/
 
 ```javascript
 module.exports = {
-  env: 'cloud1-d4gpg78un14373e96'
+  env: 'your_cloud_env_id'
 }
 ```
 
