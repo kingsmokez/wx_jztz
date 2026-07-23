@@ -1,0 +1,57 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/auction/auction",
+    "pages/wp2/wp2",
+    "pages/strong/strong",
+    "pages/mine/mine"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#FFD600",
+    "navigationBarTitleText": "价值投资之王",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#FAFAFA",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#888888",
+    "selectedColor": "#1A1A1A",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "images/tab_home.png",
+        "selectedIconPath": "images/tab_home_active.png"
+      },
+      {
+        "pagePath": "pages/auction/auction",
+        "text": "竞价",
+        "iconPath": "images/tab_auction.png",
+        "selectedIconPath": "images/tab_auction_active.png"
+      },
+      {
+        "pagePath": "pages/wp2/wp2",
+        "text": "尾盘",
+        "iconPath": "images/tab_wp2.png",
+        "selectedIconPath": "images/tab_wp2_active.png"
+      },
+      {
+        "pagePath": "pages/strong/strong",
+        "text": "强势",
+        "iconPath": "images/tab_strong.png",
+        "selectedIconPath": "images/tab_strong_active.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "images/tab_mine.png",
+        "selectedIconPath": "images/tab_mine_active.png"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

@@ -1,0 +1,302 @@
+/* ===== Loot Drop Brutalist 风格配色 ===== */
+/* 忠实还原 D:\UI\AIWebsiteCloner\webUI\loot-drop-clone 配色 */
+/* 背景 #FAFAFA, 文字 #1A1A1A, 边框 #1A1A1A, 主色 #FFD600 */
+
+page {
+  /* 背景色系 — 浅灰白 (loot-drop-clone 原版) */
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --surface-2: #F5F5F5;
+  --surface-3: #EEEEEE;
+
+  /* 文字色系 — 深色代替纯黑 */
+  --fg: #1A1A1A;
+  --fg-2: #888888;
+  --fg-3: #CCCCCC;
+  --muted: #888888;
+
+  /* 边框 — Brutalist 粗边框 */
+  --border: #1A1A1A;
+  --border-light: #CCCCCC;
+
+  /* 主色调 — Loot Drop 品牌色 */
+  --accent: #FFD600;
+  --accent-2: #F59E0B;
+  --accent-dim: #FFF8E1;
+
+  /* 涨跌色 */
+  --pink: #FF4081;
+  --green: #00C853;
+  --blue: #2979FF;
+
+  /* 辅助色 */
+  --red: #7F1D1D;
+  --orange: #FF6B00;
+  --amber: #F59E0B;
+  --gold: #EAB308;
+  --warm-brown: #8B6914;
+  --cream: #FFFFFF;
+
+  /* Loot 品牌色 */
+  --loot-yellow: #FFD600;
+  --loot-pink: #FF4081;
+  --loot-green: #00C853;
+  --loot-blue: #2979FF;
+  --loot-amber: #F59E0B;
+  --loot-orange: #FF6B00;
+  --loot-red: #7F1D1D;
+  --loot-dark: #1A1A1A;
+  --loot-gold: #EAB308;
+
+  --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+  --font-heading: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --radius: 0px;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+
+  background: var(--bg);
+  font-family: var(--font-body);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 涨跌色 */
+.price-up, .up { color: var(--pink) !important; }
+.price-down, .down { color: var(--green) !important; }
+.price-flat { color: var(--fg-2) !important; }
+
+/* 动画 */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes bar-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* 炫酷推荐等级动画 */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 4px var(--loot-yellow), 0 0 8px var(--loot-orange); }
+  50% { box-shadow: 0 0 12px var(--loot-yellow), 0 0 24px var(--loot-orange), 0 0 36px var(--pink); }
+}
+@keyframes fireGlow {
+  0%, 100% { box-shadow: 0 0 6px #FF6B00, 0 0 12px #FF4081; }
+  50% { box-shadow: 0 0 16px #FF6B00, 0 0 28px #FF4081, 0 0 40px #FFD600; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes rainbowBorder {
+  0% { border-color: #FFD600; }
+  25% { border-color: #FF4081; }
+  50% { border-color: #FF6B00; }
+  75% { border-color: #00C853; }
+  100% { border-color: #FFD600; }
+}
+@keyframes bounceIn {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.08); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes fireShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ===== 推荐等级 — 炫酷特效版 ===== */
+
+/* 强烈推荐 — 小标签，比普通字略大 */
+.rec-strong {
+  display: inline-block;
+  font-size: 15px !important;
+  font-weight: 800;
+  color: #FFFFFF !important;
+  background: linear-gradient(135deg, #FF6B00, #FF4081);
+  padding: 3px 10px;
+  border: 2px solid var(--border);
+  letter-spacing: 1px;
+}
+
+/* 推荐 — 绿色小标签 */
+.rec-buy {
+  display: inline-block;
+  font-size: 14px !important;
+  font-weight: 800;
+  color: #FFFFFF !important;
+  background: var(--loot-green);
+  padding: 3px 10px;
+  border: 2px solid var(--border);
+}
+
+/* 关注 — 蓝色小标签 */
+.rec-watch {
+  display: inline-block;
+  font-size: 13px !important;
+  font-weight: 700;
+  color: #FFFFFF !important;
+  background: var(--loot-blue);
+  padding: 3px 10px;
+  border: 2px solid var(--border);
+}
+
+/* 谨慎 — 灰色小标签 */
+.rec-caution {
+  display: inline-block;
+  font-size: 13px !important;
+  font-weight: 700;
+  color: var(--fg) !important;
+  background: var(--surface-2);
+  padding: 3px 10px;
+  border: 2px solid var(--border-light);
+}
+
+/* 评分后面的推荐文字（竞价/尾盘用） — 小标签带背景 */
+.rec-inline {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 2px solid var(--border);
+  line-height: 1.4;
+}
+.rec-inline.rec-strong {
+  font-size: 11px !important;
+  padding: 1px 6px !important;
+  color: #FFFFFF !important;
+  background: linear-gradient(135deg, #FF6B00, #FF4081);
+  border-color: var(--border) !important;
+  animation: none !important;
+}
+.rec-inline.rec-buy {
+  font-size: 11px !important;
+  padding: 1px 6px !important;
+  color: #FFFFFF !important;
+  background: var(--loot-green);
+  border-color: var(--border) !important;
+}
+.rec-inline.rec-watch {
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  color: #FFFFFF !important;
+  background: var(--loot-blue);
+  border-color: var(--border) !important;
+}
+.rec-inline.rec-caution {
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  color: var(--fg) !important;
+  background: var(--surface-2);
+  border-color: var(--border-light) !important;
+}
+/* 评分后面的推荐标签 — 小号标签，跟随"评分"同行 */
+.score-label-tag {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 8px;
+  margin-left: 6px;
+  border: 2px solid var(--border);
+  vertical-align: middle; flex-shrink: 0; white-space: nowrap;
+}
+.score-label-tag.rec-strong {
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border: 2px solid var(--border) !important;
+  animation: none !important;
+  letter-spacing: 0 !important;
+}
+.score-label-tag.rec-buy {
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border: 2px solid var(--border) !important;
+}
+.score-label-tag.rec-watch {
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  border: 2px solid var(--border) !important;
+}
+.score-label-tag.rec-caution {
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  border: 2px solid var(--border-light) !important;
+}
+
+/* ===== 推荐等级横幅（放在卡片最顶部，全宽醒目） ===== */
+.rec-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-bottom: 3px solid var(--border);
+}
+.rec-banner-strong {
+  background: linear-gradient(135deg, #FF6B00, #FF4081);
+}
+.rec-banner-buy {
+  background: var(--loot-green);
+}
+.rec-banner-watch {
+  background: var(--loot-blue);
+}
+.rec-banner-caution {
+  background: var(--surface-2);
+}
+.rec-banner text {
+  font-size: 18px;
+  font-weight: 900;
+  color: #FFFFFF;
+  letter-spacing: 2px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.rec-banner-caution text {
+  color: var(--fg);
+  text-shadow: none;
+}
+
+/* ===== 评分圆圈特效 ===== */
+.score-circle-strong {
+  border-color: #FF4081 !important;
+  box-shadow: 0 0 6px rgba(255,64,129,0.3);
+}
+.score-circle-buy {
+  border-color: #00C853 !important;
+  box-shadow: 0 0 8px rgba(0,200,83,0.3);
+}
+
+/* 信号标签 — Brutalist 粗边框 */
+.sig {
+  font-size: 9px; padding: 2px 6px; font-weight: 800;
+  border: 2px solid var(--border); display: inline-block;
+}
+.sig-pullback { background: var(--loot-green); color: var(--loot-dark); border-color: var(--border); }
+.sig-break { background: var(--accent); color: var(--loot-dark); border-color: var(--border); }
+.sig-cross { background: var(--loot-amber); color: var(--loot-dark); border-color: var(--border); }
+.sig-gentle { background: #E8F5E9; color: #2E7D32; border-color: #2E7D32; }
+.sig-moderate { background: #FFF8E1; color: #F57F17; border-color: #F57F17; }
+.sig-extreme { background: #FFEBEE; color: #C62828; border-color: #C62828; }
+.sig-strong { background: var(--pink); color: var(--loot-dark); border-color: var(--border); }
+.sig-risk { background: var(--orange); color: #fff; border-color: var(--border); }
+.sig-oversold { background: var(--loot-blue); color: #fff; border-color: var(--border); }
+.sig-overbought { background: #FFF3E0; color: #E65100; border-color: #E65100; }
+.sig-pe { background: #E8F5E9; color: #1B5E20; border-color: #1B5E20; }
+.sig-roe { background: var(--loot-green); color: var(--loot-dark); border-color: var(--border); }
+
+/* 通用卡片 — Brutalist 粗边框 */
+.brutal-card { background: var(--surface); border: 3px solid var(--border); margin-bottom: var(--space-5); }
+.brutal-btn { background: var(--accent); border: 3px solid var(--border); color: var(--loot-dark); font-weight: 900; font-size: 12px; padding: 6px 20px; display: inline-block; }
+.brutal-btn:active { background: var(--loot-dark); color: #fff; }
+.brutal-tag { border: 2px solid var(--border); padding: 2px 8px; font-size: 9px; font-weight: 800; }
+
+
+
+
+
+

@@ -1,0 +1,11 @@
+{
+  "cloudfunction": {
+    "timeout": 20
+  },
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  },
+  "name": "scoring",
+  "version": "1.0.0",
+  "main": "index.js"
+}

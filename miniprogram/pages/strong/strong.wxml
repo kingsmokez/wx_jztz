@@ -1,0 +1,179 @@
+<!--pages/strong/strong.wxml — Loot Drop Brutalist 风格，对齐原版模板-->
+<wxs src="../../utils/format.wxs" module="fmt" />
+<view class="page-container">
+  <!-- 大盘环境 -->
+  <view class="env-bar" wx:if="{{marketEnv}}">
+    <view class="env-label"><text>沪深300</text></view>
+    <text class="env-pct {{fmt.changeClass(marketEnv.changePct)}}">{{fmt.changePct(marketEnv.changePct)}}%</text>
+    <text class="env-status">{{marketEnv.status}}</text>
+  </view>
+
+  <!-- 操作栏 -->
+  <view class="action-bar">
+    <view class="action-left">
+      <text class="pick-title">短线强势股</text>
+      <text class="pick-time" wx:if="{{pickTime}}">{{pickTime}}</text>
+    </view>
+    <view class="btn-refresh" bindtap="refresh"><text>刷新</text></view>
+  </view>
+
+  <!-- 统计行 -->
+  <view class="stats-row" wx:if="{{stocks.length > 0}}">
+    <view class="stat-box"><text class="val gold">{{stocks.length}}</text><text class="lbl">入选</text></view>
+    <view class="stat-box"><text class="val">{{avgChange}}</text><text class="lbl">均涨幅</text></view>
+    <view class="stat-box"><text class="val">{{avgScore}}</text><text class="lbl">均评分</text></view>
+    <view class="stat-box"><text class="val green">{{goldenCount}}</text><text class="lbl">金叉</text></view>
+    <view class="stat-box"><text class="val">{{pullbackCount}}</text><text class="lbl">企稳</text></view>
+  </view>
+
+  <!-- 加载 -->
+  <view wx:if="{{loading}}" class="loading-wrap">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">智能选股中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{stocks.length === 0 && !loading}}" class="empty-state">
+    <text class="empty-icon">📭</text>
+    <text class="empty-title">暂无数据</text>
+    <text class="empty-desc">点击「刷新」开始选股</text>
+  </view>
+
+  <!-- 股票列表 -->
+  <view wx:else class="stock-list">
+    <block wx:for="{{stocks}}" wx:key="code" wx:for-index="idx">
+      <view class="stock-card">
+        <!-- 头部：序号 + 信号标签 -->
+        <view class="card-header">
+          <text class="card-rank">#{{idx + 1}}</text>
+          <view class="card-signals">
+            <text wx:if="{{item.pullbackStable}}" class="sig sig-pullback">回调企稳</text>
+            <text wx:if="{{item.goldenCross}}" class="sig sig-cross">金叉</text>
+            <text wx:if="{{item.breakthroughPct >= 0}}" class="sig sig-break">突破</text>
+            <text wx:if="{{item.gentleVolume}}" class="sig sig-gentle">温和放量</text>
+            <text wx:if="{{item.moderateVolume}}" class="sig sig-moderate">明显放量</text>
+            <text wx:if="{{item.extremeVolume}}" class="sig sig-extreme">极端放量</text>
+            <text wx:if="{{item.change5d >= 10}}" class="sig sig-strong">强势</text>
+            <text wx:if="{{(item.positionPct >= 90 && item.changePct >= 7) || item.changePct >= 9}}" class="sig sig-risk">追高风险</text>
+            <text wx:if="{{item.rsi > 0 && item.rsi < 30}}" class="sig sig-oversold">RSI超卖</text>
+            <text wx:if="{{item.rsi > 70}}" class="sig sig-overbought">RSI偏高</text>
+            <text wx:if="{{item.pe > 0 && item.pe < 15}}" class="sig sig-pe">PE低估</text>
+            <text wx:if="{{item.roe > 15}}" class="sig sig-roe">ROE优秀</text>
+          </view>
+        </view>
+
+        <!-- 名称 -->
+        <view class="card-name-section">
+          <view class="name-left">
+            <view class="name-row-wrap">
+              <text class="stock-name">{{item.name}}</text>
+              <text class="card-rec-tag {{fmt.recommendClass(item.totalScore)}}">{{fmt.scoreRecommend(item.totalScore)}}</text>
+            </view>
+            <text class="stock-code">{{item.code}}</text>
+            <text class="stock-industry" wx:if="{{item.industry}}">{{item.industry}}</text>
+          </view>
+          <view class="price-right">
+            <text class="stock-price {{fmt.changeClass(item.changePct)}}">{{fmt.price(item.price)}}</text>
+            <text class="stock-change {{fmt.changeClass(item.changePct)}}">{{fmt.changePct(item.changePct)}}%</text>
+          </view>
+        </view>
+
+        <!-- 核心指标 4列: 5日涨幅 / 突破 / 位置 / 量比 -->
+        <view class="metrics-grid">
+          <view class="metric-cell">
+            <text class="metric-label">5日涨幅</text>
+            <text class="metric-value {{fmt.changeClass(item.change5d)}}">{{fmt.changePct(item.change5d)}}%</text>
+          </view>
+          <view class="metric-cell">
+            <text class="metric-label">突破</text>
+            <text class="metric-value {{item.breakthroughPct >= 0 ? 'up' : ''}}">{{item.breakthroughPct >= 0 ? item.breakthroughPct + "%" : item.breakthroughPct + "%"}}</text>
+          </view>
+          <view class="metric-cell">
+            <text class="metric-label">位置</text>
+            <text class="metric-value">{{item.positionPct}}%</text>
+          </view>
+          <view class="metric-cell">
+            <text class="metric-label">量比</text>
+            <text class="metric-value {{item.volumeRatio >= 2 ? 'up' : ''}}">{{fmt.toFixed2(item.volumeRatio)}}</text>
+          </view>
+        </view>
+
+        <!-- 核心指标 4列: 换手率 / RSI / 振幅 / 成交额 -->
+        <view class="metrics-grid">
+          <view class="metric-cell">
+            <text class="metric-label">换手率</text>
+            <text class="metric-value">{{fmt.toFixed2(item.turnover)}}%</text>
+          </view>
+          <view class="metric-cell">
+            <text class="metric-label">RSI</text>
+            <text class="metric-value {{fmt.rsiColorClass(item.rsi)}}">{{fmt.rsi(item.rsi)}}</text>
+          </view>
+          <view class="metric-cell">
+            <text class="metric-label">振幅</text>
+            <text class="metric-value">{{fmt.toFixed2(item.amplitude)}}%</text>
+          </view>
+          <view class="metric-cell">
+            <text class="metric-label">成交额</text>
+            <text class="metric-value">{{fmt.amount(item.amount)}}</text>
+          </view>
+        </view>
+
+        <!-- 基本面指标 -->
+        <view class="detail-section">
+          <text class="detail-section-title">基本面指标</text>
+          <view class="detail-grid">
+            <view class="detail-item"><text class="detail-label">PE</text><text class="detail-value">{{fmt.toFixed2(item.pe)}}</text></view>
+            <view class="detail-item"><text class="detail-label">PB</text><text class="detail-value">{{fmt.toFixed2(item.pb)}}</text></view>
+            <view class="detail-item"><text class="detail-label">ROE</text><text class="detail-value {{fmt.roeClass(item.roe)}}">{{fmt.roe(item.roe)}}</text></view>
+            <view class="detail-item"><text class="detail-label">毛利率</text><text class="detail-value {{fmt.grossMarginClass(item.grossMargin)}}">{{fmt.grossMargin(item.grossMargin)}}</text></view>
+            <view class="detail-item"><text class="detail-label">负债率</text><text class="detail-value {{fmt.debtRatioClass(item.debtRatio)}}">{{fmt.debtRatio(item.debtRatio)}}</text></view>
+            <view class="detail-item"><text class="detail-label">市值</text><text class="detail-value">{{fmt.marketCap(item.marketCap)}}</text></view>
+          </view>
+        </view>
+
+        <!-- 技术面 -->
+        <view class="detail-section">
+          <text class="detail-section-title">技术面</text>
+          <view class="detail-grid">
+            <view class="detail-item"><text class="detail-label">均线</text><text class="detail-value {{fmt.maSignalClass(item.maSignal)}}">{{fmt.maSignal(item.maSignal)}}</text></view>
+            <view class="detail-item"><text class="detail-label">布林带</text><text class="detail-value {{fmt.bollClass(item.bollPosition)}}">{{fmt.bollPosition(item.bollPosition)}}</text></view>
+            <view class="detail-item"><text class="detail-label">5日动量</text><text class="detail-value {{fmt.changeClass(item.momentum5d)}}">{{fmt.changePct(item.momentum5d)}}%</text></view>
+          </view>
+        </view>
+
+        <!-- 评分行: 总分 + 技术 + 基本面 -->
+        <view class="score-row">
+          <text class="score-label">总分</text>
+          <view class="score-fill-bg"><view class="score-fill" style="width: {{item.totalScore}}%"></view></view>
+          <text class="score-num {{fmt.recommendClass(item.totalScore)}}">{{item.totalScore}}</text>
+        </view>
+        <view class="score-row">
+          <text class="score-label">技术</text>
+          <view class="score-fill-bg"><view class="score-fill" style="width: {{item.techScore || 0}}%"></view></view>
+          <text class="score-num">{{item.techScore || 0}}</text>
+        </view>
+        <view class="score-row">
+          <text class="score-label">基本面</text>
+          <view class="score-fill-bg"><view class="score-fill" style="width: {{item.v5Score || 0}}%"></view></view>
+          <text class="score-num">{{fmt.toFixed2(item.v5Score)}}</text>
+        </view>
+
+        <!-- 买卖建议 -->
+        <view class="buysell-row" wx:if="{{item.buySell}}">
+          <view class="bs-cell bs-buy">
+            <text class="bs-label">买入</text>
+            <text class="bs-price">{{item.buySell.buyPrice || "--"}}</text>
+          </view>
+          <view class="bs-cell bs-sell">
+            <text class="bs-label">目标</text>
+            <text class="bs-price">{{item.buySell.sellPrice || "--"}}</text>
+          </view>
+          <view class="bs-cell bs-stop">
+            <text class="bs-label">止损</text>
+            <text class="bs-price">{{item.buySell.stopLoss || "--"}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+  </view>
+</view>

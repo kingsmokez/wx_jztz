@@ -1,0 +1,5 @@
+<!--components/score-badge/score-badge.wxml-->
+<view class="score-badge {{value >= 80 ? 'score-high' : value >= 60 ? 'score-mid' : value >= 40 ? 'score-low' : 'score-poor'}}">
+  <text class="score-num">{{value}}</text>
+  <text class="score-label" wx:if="{{label}}">{{label}}</text>
+</view>

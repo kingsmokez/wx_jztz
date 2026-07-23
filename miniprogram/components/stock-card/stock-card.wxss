@@ -1,0 +1,7 @@
+/* components/stock-card/stock-card.wxss */
+.stock-card { background: #fff; border-radius: 16rpx; padding: 20rpx 24rpx; margin-bottom: 16rpx; box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.06); }
+.stock-header { display: flex; align-items: center; gap: 12rpx; }
+.stock-name { font-size: 30rpx; font-weight: bold; }
+.stock-code { font-size: 24rpx; color: #999; }
+.stock-price { font-size: 32rpx; font-weight: bold; margin-left: auto; }
+.stock-change { font-size: 26rpx; }

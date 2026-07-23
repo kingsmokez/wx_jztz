@@ -1,0 +1,166 @@
+/* format.wxs - WXS 格式化工具（WXS 兼容语法）— Loot Drop Brutalist Edition */
+function price(val) {
+  if (val === null || val === undefined) return "--"
+  return parseFloat(val).toFixed(2)
+}
+function changePct(val) {
+  if (val === null || val === undefined) return "0.00"
+  return parseFloat(val).toFixed(2)
+}
+function toFixed2(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  return parseFloat(val).toFixed(2)
+}
+function marketCap(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  if (val >= 10000) return (val / 10000).toFixed(2) + "万亿"
+  if (val >= 1) return val.toFixed(2) + "亿"
+  return (val * 10000).toFixed(2) + "万"
+}
+function amount(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  if (val >= 10000) return (val / 10000).toFixed(2) + "亿"
+  return val.toFixed(2) + "万"
+}
+function changeClass(val) {
+  if (val === null || val === undefined) return ""
+  var n = parseFloat(val)
+  if (n > 0) return "up"
+  if (n < 0) return "down"
+  return ""
+}
+function scoreTag(val) {
+  if (val === null || val === undefined) return "⚪"
+  if (val >= 80) return "🏆"
+  if (val >= 70) return "⭐"
+  if (val >= 60) return "👍"
+  if (val >= 50) return "📊"
+  return "📈"
+}
+function scoreClass(val) {
+  if (val === null || val === undefined) return "score-fair"
+  if (val >= 80) return "score-excellent"
+  if (val >= 65) return "score-good"
+  return "score-fair"
+}
+function scoreRecommend(val) {
+  if (val === null || val === undefined) return "关注"
+  if (val >= 80) return "强烈推荐"
+  if (val >= 70) return "推荐"
+  if (val >= 60) return "关注"
+  if (val >= 50) return "观望"
+  return "谨慎"
+}
+function recommendClass(val) {
+  if (val === null || val === undefined) return "rec-watch"
+  if (val >= 80) return "rec-strong"
+  if (val >= 70) return "rec-buy"
+  if (val >= 60) return "rec-watch"
+  return "rec-caution"
+}
+/* 推荐等级横幅 class */
+function recBannerClass(val) {
+  if (val === null || val === undefined) return "rec-banner-caution"
+  if (val >= 80) return "rec-banner-strong"
+  if (val >= 70) return "rec-banner-buy"
+  if (val >= 60) return "rec-banner-watch"
+  return "rec-banner-caution"
+}
+/* 评分圆圈 class */
+function scoreCircleClass(val) {
+  if (val === null || val === undefined) return ""
+  if (val >= 80) return "score-circle-strong"
+  if (val >= 70) return "score-circle-buy"
+  return ""
+}
+function bollClass(val) {
+  if (val === null || val === undefined) return ""
+  if (val > 0.8) return "up"
+  if (val < 0.2) return "down"
+  return ""
+}
+function bollPosition(val) {
+  if (val === null || val === undefined) return "--"
+  return parseFloat(val).toFixed(2)
+}
+function roe(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  return parseFloat(val).toFixed(1) + "%"
+}
+function roeClass(val) {
+  if (val === null || val === undefined) return ""
+  if (val >= 15) return "up"
+  if (val >= 10) return ""
+  if (val < 0) return "down"
+  return ""
+}
+function grossMargin(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  return parseFloat(val).toFixed(1) + "%"
+}
+function grossMarginClass(val) {
+  if (val === null || val === undefined) return ""
+  if (val >= 30) return "up"
+  if (val >= 15) return ""
+  return "down"
+}
+function debtRatio(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  return parseFloat(val).toFixed(1) + "%"
+}
+function debtRatioClass(val) {
+  if (val === null || val === undefined) return ""
+  if (val > 0 && val <= 50) return "up"
+  if (val > 70) return "down"
+  return ""
+}
+function rsi(val) {
+  if (val === null || val === undefined || val === 0) return "--"
+  return parseFloat(val).toString()
+}
+function rsiColorClass(val) {
+  if (val === null || val === undefined || val <= 0) return ""
+  var n = parseFloat(val)
+  if (n > 0 && n < 30) return "price-down"
+  if (n > 70) return "price-up"
+  return ""
+}
+
+function maSignal(val) {
+  if (val === "bull") return "多头排列"
+  if (val === "bear") return "空头排列"
+  if (val === "neutral") return "震荡整理"
+  return "未知"
+}
+function maSignalClass(val) {
+  if (val === "bull") return "up"
+  if (val === "bear") return "down"
+  return ""
+}
+
+module.exports = {
+  price: price,
+  changePct: changePct,
+  toFixed2: toFixed2,
+  marketCap: marketCap,
+  amount: amount,
+  changeClass: changeClass,
+  scoreTag: scoreTag,
+  scoreClass: scoreClass,
+  scoreRecommend: scoreRecommend,
+  recommendClass: recommendClass,
+  recBannerClass: recBannerClass,
+  scoreCircleClass: scoreCircleClass,
+  bollClass: bollClass,
+  bollPosition: bollPosition,
+  roe: roe,
+  roeClass: roeClass,
+  grossMargin: grossMargin,
+  grossMarginClass: grossMarginClass,
+  debtRatio: debtRatio,
+  debtRatioClass: debtRatioClass,
+  rsi: rsi,
+  rsiColorClass: rsiColorClass,
+  maSignal: maSignal,
+  maSignalClass: maSignalClass,
+}

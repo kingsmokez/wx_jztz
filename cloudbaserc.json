@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "cloud1-d4gpg78un14373e96",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    { "name": "login", "timeout": 5, "memorySize": 128, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "setupDB", "timeout": 15, "memorySize": 128, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "marketEnv", "timeout": 60, "memorySize": 256, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "dataFetcher", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "dataUpdater", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "scoring", "timeout": 20, "memorySize": 256, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "techIndicator", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "sectorRotation", "timeout": 20, "memorySize": 256, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "scheduledPicker", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "strongPicker", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "wp2Picker", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" },
+    { "name": "auctionPicker", "timeout": 60, "memorySize": 512, "runtime": "Nodejs16.13", "handler": "index.main" }
+  ]
+}

@@ -1,0 +1,12 @@
+<!--components/stock-card/stock-card.wxml-->
+<view class="stock-card" bindtap="onTap" longpress="onLongPress">
+  <view class="stock-header">
+    <text class="stock-name">{{stock.name}}</text>
+    <text class="stock-code">{{stock.code}}</text>
+    <text class="stock-price {{stock.changePct > 0 ? 'price-up' : stock.changePct < 0 ? 'price-down' : 'price-flat'}}">{{stock.price}}</text>
+    <text class="stock-change {{stock.changePct > 0 ? 'price-up' : stock.changePct < 0 ? 'price-down' : 'price-flat'}}">
+      {{stock.changePct > 0 ? '+' : ''}}{{stock.changePct}}%
+    </text>
+  </view>
+  <slot></slot>
+</view>

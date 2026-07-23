@@ -1,0 +1,13 @@
+{
+  "timeout": 120,
+  "memorySize": 512,
+  "runtime": "Nodejs16.13",
+  "handler": "index.main",
+  "triggers": [
+    {
+      "name": "autoUpdate",
+      "type": "timer",
+      "config": "0 */5 9-15 * * 1-5 *"
+    }
+  ]
+}

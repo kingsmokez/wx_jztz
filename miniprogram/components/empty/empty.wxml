@@ -1,0 +1,6 @@
+<!--components/empty/empty.wxml-->
+<view class="empty-wrap" wx:if="{{show}}">
+  <text class="empty-icon">📭</text>
+  <text class="empty-text">{{text}}</text>
+  <text class="empty-sub" wx:if="{{subText}}">{{subText}}</text>
+</view>

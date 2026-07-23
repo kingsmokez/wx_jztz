@@ -1,0 +1,99 @@
+<!--pages/wp2/wp2.wxml-->
+<wxs src="../../utils/format.wxs" module="fmt" />
+<view class="page-container">
+  <view class="env-bar" wx:if="{{marketEnv}}">
+    <view class="env-left">
+      <view class="env-label"><text>沪深300</text></view>
+      <text class="env-pct {{fmt.changeClass(marketEnv.changePct)}}">{{fmt.changePct(marketEnv.changePct)}}%</text>
+    </view>
+    <text class="env-status {{fmt.changeClass(marketEnv.changePct)}}">{{marketEnv.status}}</text>
+  </view>
+  <view class="action-bar">
+    <view class="action-left">
+      <text class="pick-title">尾盘强势股</text>
+      <text class="pick-time" wx:if="{{pickTime}}">更新 {{pickTime}}</text>
+    </view>
+    <view class="btn-refresh" bindtap="refresh"><text class="btn-text">刷新</text></view>
+  </view>
+  <view wx:if="{{loading}}" class="loading-wrap"><view class="loading-spinner"></view><text class="loading-text">智能选股中...</text></view>
+  <view wx:elif="{{stocks.length === 0}}" class="empty-state"><text class="empty-icon">📭</text><text class="empty-title">暂无数据</text><text class="empty-desc">点击「刷新」开始选股</text></view>
+  <view wx:else class="stock-list">
+    <block wx:for="{{stocks}}" wx:key="code">
+      <view class="stock-card">
+        <view class="card-header">
+          <view class="card-header-left">
+            <view class="card-header-tag"><text>{{fmt.scoreTag(item.totalScore)}}</text></view>
+            <text class="card-header-score">评分 {{item.totalScore}}</text>
+          </view>
+          <view class="card-header-right">
+            <text class="card-rsi" wx:if="{{item.rsi > 0}}">RSI {{item.rsi}}</text>
+          </view>
+        </view>
+        <view class="card-title-section">
+          <view class="title-left">
+            <view class="name-row">
+              <text class="card-stock-name">{{item.name}}</text>
+              <text class="card-stock-code">{{item.code}}</text>
+            </view>
+            <text class="card-industry" wx:if="{{item.industry}}">{{item.industry}}</text>
+          </view>
+          <view class="card-price-group">
+            <text class="card-stock-price {{fmt.changeClass(item.changePct)}}">{{fmt.price(item.price)}}</text>
+            <text class="card-stock-change {{fmt.changeClass(item.changePct)}}">{{fmt.changePct(item.changePct)}}%</text>
+          </view>
+        </view>
+        <view class="signals-section" wx:if="{{item.signals && item.signals.length > 0}}">
+          <block wx:for="{{item.signals}}" wx:key="*this">
+            <text class="signal-tag">{{item}}</text>
+          </block>
+        </view>
+        <view class="score-section">
+          <view class="score-main">
+            <view class="score-circle">
+              <text class="score-num">{{item.totalScore}}</text>
+              <text class="score-label">评分</text>
+            </view>
+
+          </view>
+          <text class="rec-inline {{fmt.recommendClass(item.totalScore)}}">{{fmt.scoreRecommend(item.totalScore)}}</text>
+            <view class="factor-scores">
+            <view class="factor-item"><text class="factor-label">技术</text><view class="factor-bar-sm"><view class="factor-fill-sm" style="width: {{item.techScore || 0}}%"></view></view><text class="factor-value">{{item.techScore || 0}}</text></view>
+            <view class="factor-item"><text class="factor-label">基本面</text><view class="factor-bar-sm"><view class="factor-fill-sm" style="width: {{item.v5Score || 0}}%"></view></view><text class="factor-value">{{item.v5Score || 0}}</text></view>
+            <view class="factor-item"><text class="factor-label">RSI</text><view class="factor-bar-sm"><view class="factor-fill-sm" style="width: {{item.rsi > 0 ? item.rsi : 0}}%"></view></view><text class="factor-value">{{fmt.rsi(item.rsi)}}</text></view>
+          </view>
+        </view>
+        <view class="detail-section">
+          <text class="detail-section-title">核心指标</text>
+          <view class="detail-grid">
+            <view class="detail-item"><text class="detail-label">PE</text><text class="detail-value">{{fmt.toFixed2(item.pe)}}</text></view>
+            <view class="detail-item"><text class="detail-label">PB</text><text class="detail-value">{{fmt.toFixed2(item.pb)}}</text></view>
+            <view class="detail-item"><text class="detail-label">ROE</text><text class="detail-value {{fmt.roeClass(item.roe)}}">{{fmt.roe(item.roe)}}</text></view>
+            <view class="detail-item"><text class="detail-label">换手率</text><text class="detail-value">{{fmt.toFixed2(item.turnover)}}%</text></view>
+            <view class="detail-item"><text class="detail-label">量比</text><text class="detail-value">{{fmt.toFixed2(item.volumeRatio)}}</text></view>
+            <view class="detail-item"><text class="detail-label">市值</text><text class="detail-value">{{fmt.marketCap(item.marketCap)}}</text></view>
+          </view>
+        </view>
+        <view class="detail-section" wx:if="{{item.momentum5d || item.bollPosition}}">
+          <text class="detail-section-title">技术面</text>
+          <view class="detail-grid">
+            <view class="detail-item"><text class="detail-label">均线</text><text class="detail-value {{fmt.maSignalClass(item.maSignal)}}">{{fmt.maSignal(item.maSignal)}}</text></view>
+            <view class="detail-item"><text class="detail-label">5日动量</text><text class="detail-value {{fmt.changeClass(item.momentum5d)}}">{{fmt.changePct(item.momentum5d)}}%</text></view>
+            <view class="detail-item"><text class="detail-label">布林带</text><text class="detail-value {{fmt.bollClass(item.bollPosition)}}">{{fmt.bollPosition(item.bollPosition)}}</text></view>
+          </view>
+        </view>
+        <view class="detail-section" wx:if="{{item.grossMargin || item.debtRatio}}">
+          <text class="detail-section-title">财务指标</text>
+          <view class="detail-grid">
+            <view class="detail-item"><text class="detail-label">毛利率</text><text class="detail-value {{fmt.grossMarginClass(item.grossMargin)}}">{{fmt.grossMargin(item.grossMargin)}}</text></view>
+            <view class="detail-item"><text class="detail-label">负债率</text><text class="detail-value {{fmt.debtRatioClass(item.debtRatio)}}">{{fmt.debtRatio(item.debtRatio)}}</text></view>
+          </view>
+        </view>
+        <view class="buysell-section" wx:if="{{item.buySell}}">
+          <view class="bs-item bs-buy"><text class="bs-label">买入</text><text class="bs-price">{{item.buySell.buyPrice || "--"}}</text></view>
+          <view class="bs-item bs-sell"><text class="bs-label">目标</text><text class="bs-price">{{item.buySell.sellPrice || "--"}}</text></view>
+          <view class="bs-item bs-stop"><text class="bs-label">止损</text><text class="bs-price">{{item.buySell.stopLoss || "--"}}</text></view>
+        </view>
+      </view>
+    </block>
+  </view>
+</view>

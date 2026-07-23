@@ -1,0 +1,84 @@
+<!--pages/mine/mine.wxml-->
+<view class="page-container">
+  <view class="mine-header">
+    <view class="avatar-block"><text class="avatar-text">JZ</text></view>
+    <view class="user-info">
+      <text class="user-name">微信用户</text>
+      <text class="user-id">价值投资之王</text>
+    </view>
+    <view class="pro-badge"><text class="pro-text">专业版</text></view>
+  </view>
+  <view class="stats-row">
+    <view class="stats-item">
+      <text class="stats-num">{{totalPicks}}</text>
+      <text class="stats-label">选股数</text>
+    </view>
+    <view class="stats-item">
+      <text class="stats-num">{{avgScore}}</text>
+      <text class="stats-label">平均分</text>
+    </view>
+    <view class="stats-item">
+      <text class="stats-num">{{highCount}}</text>
+      <text class="stats-label">高分股</text>
+    </view>
+  </view>
+  <view class="section-header">
+    <text class="section-icon">⚙</text>
+    <text class="section-label">系统信息</text>
+  </view>
+  <view class="info-list">
+    <view class="info-row">
+      <text class="info-label">版本</text>
+      <text class="info-value">v2.0.0</text>
+    </view>
+    <view class="info-row">
+      <text class="info-label">评分引擎</text>
+      <text class="info-value">V5.5 五因子</text>
+    </view>
+    <view class="info-row">
+      <text class="info-label">选股策略</text>
+      <text class="info-value">竞价 / 尾盘 / 强势</text>
+    </view>
+    <view class="info-row" bindtap="initDB">
+      <text class="info-label">初始化数据库</text>
+      <text class="info-value link">点击执行 →</text>
+    </view>
+  </view>
+  <view class="section-header">
+    <text class="section-icon">📊</text>
+    <text class="section-label">评分模型</text>
+  </view>
+  <view class="factor-desc">
+    <text>五因子评分模型：价值36% + 情绪33% + 动量12% + 质量11% + 成长8%</text>
+  </view>
+  <view class="factor-visual">
+    <view class="fv-item">
+      <view class="fv-bar" style="height: 72%"><view class="fv-fill" style="height: 100%"></view></view>
+      <text class="fv-label">价值</text>
+      <text class="fv-pct">36%</text>
+    </view>
+    <view class="fv-item">
+      <view class="fv-bar" style="height: 66%"><view class="fv-fill fv-opacity-85" style="height: 100%"></view></view>
+      <text class="fv-label">情绪</text>
+      <text class="fv-pct">33%</text>
+    </view>
+    <view class="fv-item">
+      <view class="fv-bar" style="height: 24%"><view class="fv-fill fv-opacity-60" style="height: 100%"></view></view>
+      <text class="fv-label">动量</text>
+      <text class="fv-pct">12%</text>
+    </view>
+    <view class="fv-item">
+      <view class="fv-bar" style="height: 22%"><view class="fv-fill fv-opacity-50" style="height: 100%"></view></view>
+      <text class="fv-label">质量</text>
+      <text class="fv-pct">11%</text>
+    </view>
+    <view class="fv-item">
+      <view class="fv-bar" style="height: 16%"><view class="fv-fill fv-opacity-35" style="height: 100%"></view></view>
+      <text class="fv-label">成长</text>
+      <text class="fv-pct">8%</text>
+    </view>
+  </view>
+  <view class="disclaimer-bar">
+    <text class="disclaimer-text">⚠ 选股结果仅供参考，不构成投资建议。股市有风险，投资需谨慎。</text>
+  </view>
+</view>

@@ -1,0 +1,88 @@
+/* pages/auction/auction.wxss — Loot Drop Brutalist 风格 */
+page { background: var(--bg); }
+.page-container { padding: var(--space-4); min-height: 100vh; }
+
+/* 大盘环境栏 */
+.env-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); background: var(--surface); border: 3px solid var(--border); margin-bottom: var(--space-4); }
+.env-left { display: flex; align-items: center; gap: var(--space-3); }
+.env-label { font-size: 11px; font-weight: 800; color: var(--fg-2); font-family: var(--font-mono); }
+.env-pct { font-size: 18px; font-weight: 900; font-family: var(--font-mono); }
+.env-status { font-size: 10px; font-weight: 800; padding: 2px 10px; border: 2px solid var(--border); }
+
+/* 操作栏 */
+.action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
+.action-left { display: flex; align-items: baseline; gap: var(--space-3); }
+.pick-title { font-size: 20px; font-weight: 900; color: var(--fg); }
+.pick-time { font-size: 10px; color: var(--fg-2); font-family: var(--font-mono); }
+.btn-refresh { background: var(--accent); border: 3px solid var(--border); padding: 6px 20px; font-size: 12px; font-weight: 900; color: var(--loot-dark); }
+.btn-refresh:active { background: var(--loot-dark); color: #fff; }
+.btn-text { }
+
+/* 加载 */
+.loading-wrap { display: flex; flex-direction: column; align-items: center; padding: 120rpx 0; }
+.loading-spinner { width: 40rpx; height: 40rpx; border: 4px solid var(--border-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+.loading-text { margin-top: var(--space-4); color: var(--fg-2); font-size: 13px; font-weight: 700; }
+
+/* 空状态 */
+.empty-state { display: flex; flex-direction: column; align-items: center; padding: 150rpx 0; }
+.empty-icon { font-size: 48px; margin-bottom: var(--space-4); }
+.empty-title { font-size: 16px; font-weight: 900; color: var(--fg); }
+.empty-desc { font-size: 12px; color: var(--fg-2); margin-top: var(--space-2); }
+
+/* 股票列表 */
+.stock-list { padding: 0 var(--space-4); }
+.stock-card { background: var(--surface); border: 3px solid var(--border); margin-bottom: var(--space-4); animation: fadeIn 0.2s ease; }
+.stock-card:active { opacity: 0.9; }
+
+/* 卡片头部 */
+.card-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--loot-amber); border-bottom: 3px solid var(--border); }
+.card-header-left { display: flex; align-items: center; gap: var(--space-3); }
+.card-header-tag { font-size: 14px; }
+.card-header-score { font-size: 12px; font-weight: 700; color: var(--loot-dark); }
+
+/* 名称区域 */
+.card-title-section { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 10px; border-bottom: 2px solid var(--border); }
+.title-left { display: flex; flex-direction: column; }
+.name-row { display: flex; align-items: baseline; gap: 8px; }
+.card-stock-name { font-size: 16px; font-weight: 900; color: var(--fg); }
+.card-stock-code { font-size: 10px; color: var(--fg-2); font-family: var(--font-mono); }
+.card-industry { font-size: 9px; color: var(--fg-2); margin-top: 2px; display: block; font-weight: 700; }
+.card-price-group { text-align: right; }
+.card-stock-price { font-size: 18px; font-weight: 900; display: block; font-family: var(--font-mono); }
+.card-stock-change { font-size: 12px; font-weight: 700; display: block; }
+
+/* 信号标签 */
+.signals-section { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 10px; border-bottom: 2px solid var(--border); }
+.signal-tag { font-size: 9px; padding: 2px 6px; font-weight: 800; border: 2px solid var(--border); display: inline-block; }
+
+/* 评分区域 */
+.score-section { display: flex; align-items: center; gap: var(--space-3); padding: 8px 10px; background: var(--surface-2); border-bottom: 2px solid var(--border); }
+.score-main { display: flex; align-items: center; gap: 10px; }
+.score-circle { width: 60px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 3px solid var(--border); background: var(--surface); }
+.score-num { font-size: 22px; font-weight: 900; line-height: 1; font-family: var(--font-mono); }
+.score-label { font-size: 9px; color: var(--fg-2); margin-top: 1px; font-weight: 700; }
+.score-recommend { font-size: 16px; font-weight: 800; }
+.factor-scores { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.factor-item { display: flex; align-items: center; gap: 6px; }
+.factor-label { width: 50px; font-size: 10px; font-weight: 700; color: var(--fg-2); }
+.factor-bar-sm { flex: 1; height: 10px; background: var(--surface); border: 2px solid var(--border); overflow: hidden; }
+.factor-fill-sm { height: 100%; background: var(--accent); }
+.factor-value { width: 30px; font-size: 12px; font-weight: 700; text-align: right; font-family: var(--font-mono); }
+
+/* 详情区域 */
+.detail-section { padding: 8px 10px; border-bottom: 2px solid var(--border); }
+.detail-section-title { font-size: 10px; font-weight: 800; margin-bottom: 6px; display: block; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.detail-item { display: flex; flex-direction: column; }
+.detail-label { font-size: 8px; color: var(--fg-3); font-weight: 700; }
+.detail-value { font-size: 13px; font-weight: 900; margin-top: 2px; font-family: var(--font-mono); }
+
+/* 买卖建议 */
+.buysell-section { display: flex; border-top: 2px solid var(--border); }
+.bs-item { flex: 1; text-align: center; padding: 6px 4px; border-right: 1px solid var(--border); }
+.bs-item:last-child { border-right: none; }
+.bs-label { font-size: 8px; color: var(--fg-3); font-weight: 700; display: block; font-family: var(--font-mono); }
+.bs-price { font-size: 13px; font-weight: 900; display: block; margin-top: 1px; font-family: var(--font-mono); }
+.bs-buy { background: #E8F5E9; }
+.bs-sell { background: #FFF8E1; }
+.bs-stop { background: #FFEBEE; }

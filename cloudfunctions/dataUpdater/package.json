@@ -1,0 +1,9 @@
+{
+  "name": "dataUpdater",
+  "version": "1.0.0",
+  "description": "全市场行情数据更新器",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

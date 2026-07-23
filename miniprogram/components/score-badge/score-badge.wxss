@@ -1,0 +1,12 @@
+/* components/score-badge/score-badge.wxss */
+.score-badge { display: inline-flex; flex-direction: column; align-items: center; padding: 4rpx 12rpx; border-radius: 8rpx; }
+.score-high { background: #e8f5e9; }
+.score-mid { background: #e3f2fd; }
+.score-low { background: #fff3e0; }
+.score-poor { background: #f5f5f5; }
+.score-num { font-size: 28rpx; font-weight: bold; }
+.score-high .score-num { color: #2ecc71; }
+.score-mid .score-num { color: #3498db; }
+.score-low .score-num { color: #f39c12; }
+.score-poor .score-num { color: #999; }
+.score-label { font-size: 18rpx; color: #999; }
