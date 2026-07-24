@@ -1,5 +1,5 @@
 /**
- * 短线强势股选股 V34e - 自适应市场+软过滤+动态连涨+形态加分
+ * 短线强势股选股 V34e - 自适应市场+硬过滤+动态连涨+形态加分(与回测一致)
  * 回测2年: 10dWR=50.36%(首破50%), 10dAR=1.26%
  * V33f基准
  * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
@@ -425,7 +425,7 @@ async function runStrongPicker(topN, force) {
     var adxFiltered = false  // V34e: replaced by adaptive ADX penalty
     // 量价背离过滤
     var vpFiltered = false
-    if (tech && tech.vpCoord && tech.vpCoord.trend === "bearish_divergence") vpFiltered = true
+    if (tech && tech.vpCoord && tech.vpCoord.trend === "bearish_divergence") vpFiltered = true  // V34e: will be hard-filtered below
     // BOLL位置过滤: bollPosition>0.85
     var bollFiltered = false  // V34e: replaced by adaptive BOLL penalty
     // V34e: 自适应市场环境
@@ -446,11 +446,9 @@ async function runStrongPicker(topN, force) {
       var consecUp = calcConsecutiveUpDays(klines)
       if (consecUp > maxConsecUp) continue
     }
-    // V34e: 自适应ADX/BOLL过滤(降权而非排除)
-    var adxPenalty = 1.0
-    if (tech && tech.adx !== undefined && (tech.adx < adxThreshold || tech.plusDI <= tech.minusDI)) adxPenalty = 0.7
-    var bollPenalty = 1.0
-    if (bollPosition > bollThreshold) bollPenalty = 0.8
+    // V34e: 硬过滤(与回测V34e_min60一致)
+    if (tech && tech.adx !== undefined && (tech.adx < adxThreshold || tech.plusDI <= tech.minusDI)) continue
+    if (bollPosition > bollThreshold) continue
     // V34e: 软量比确认(降权0.9而非0.85)
     var volPenalty = volumeRatio < 1.2 ? 0.9 : 1.0
     // V34e: 形态加分
@@ -461,10 +459,8 @@ async function runStrongPicker(topN, force) {
       if (tech.candlePatterns && tech.candlePatterns.score >= 15) morphBonus += 3
     }
     var rankingScore = v31Score * 0.75 + v10Score * 0.25 + morphBonus
-    // V34e: 统一软过滤
-    rankingScore *= adxPenalty
-    if (vpFiltered) rankingScore *= 0.6
-    rankingScore *= bollPenalty
+    // V34e: VP背离硬过滤
+    if (vpFiltered) continue
     rankingScore *= volPenalty
     rankingScore = Math.round(rankingScore)
     // V34e: minScore=60，选股少但精
