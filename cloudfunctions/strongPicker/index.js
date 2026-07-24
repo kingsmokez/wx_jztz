@@ -1,6 +1,6 @@
 /**
- * 短线强势股选股 V39d - V34e+价格位置95%+相对强度>0(回测最优)
- * 回测2年: 10dWR=56.82%, 10dAR=2.12% (V34e: 10dWR=50.36%, 10dAR=1.26%)
+ * 短线强势股选股 V43b - V39d+RS≥6%+量比≥1.5+minScore55(回测最优)
+ * 回测2年: 10dWR=57.49%, 10dAR=2.97% (V39d: 10dWR=56.82%, 10dAR=2.12%)
  * V33f基准
  * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
  * V31五维度: 资金活跃度(30)+趋势确认(25)+量价配合(20)+形态信号(15)+位置安全(10)
@@ -495,15 +495,17 @@ async function runStrongPicker(topN, force) {
       var pricePosVsHigh = calcPricePositionVsHigh(klines)
       if (pricePosVsHigh < 0.95) continue
     }
-    // V39d: 相对强度过滤 - 20日涨幅 >= 0%
+    // V43b: 量比硬过滤 - 量比 >= 1.5
+    if (volumeRatio < 1.5) continue
+    // V43b: 相对强度过滤 - 20日涨幅 >= 6% (回测rs5-7范围最优)
     if (klines && klines.length >= 21) {
       var relStrength = calcRelativeStrength(klines)
-      if (relStrength < 0) continue
+      if (relStrength < 6) continue
     }
     rankingScore *= volPenalty
     rankingScore = Math.round(rankingScore)
-    // V34e: minScore=60，选股少但精
-    if (rankingScore < 60) continue
+    // V43b: minScore=55，量比硬过滤已保证质量
+    if (rankingScore < 55) continue
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
