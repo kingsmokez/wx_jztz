@@ -4,6 +4,7 @@ cloudfunctions/*/node_modules/
 
 # 微信开发者工具
 project.config.json
+project.private.config.json
 
 # 小程序编译产物
 miniprogram/lib/
@@ -31,3 +32,22 @@ _test_*
 _backup*
 http_full_backup.txt
 cloudfunctions/_check.js
+temp_patch.txt
+cli_*.txt
+islogin_out.txt
+skills-lock.json
+cloudbaserc.json
+
+# 回测缓存数据（太大不上传）
+backtest/cache/
+backtest/results/
+backtest/fix*.ps1
+backtest/test*.js
+backtest/run.js
+backtest/run_v2.js
+
+# 截图和图片资源
+*.png
+*.jpg
+!miniprogram/images/*.png
+!miniprogram/images/*.jpg
