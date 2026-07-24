@@ -823,7 +823,414 @@ function calcTechScoreV14(stock, rsi, goldenCross, volumeRatio, bollPosition, co
   return Math.round(Math.min(100, Math.max(0, score)))
 }
 
+
+// V15 - 形态识别增强版
+function calcTechScoreV15(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var score = 0
+  var chg = stock.changePct || 0
+  var isGem = code.startsWith("300") || code.startsWith("301") || code.startsWith("688")
+  var maSignal = techData ? (techData.maSignal || "neutral") : "neutral"
+  var momentum20 = techData ? (techData.momentum20 || 0) : 0
+  var ma5 = techData ? (techData.ma5 || 0) : 0
+  var ma10 = techData ? (techData.ma10 || 0) : 0
+  var ma20 = techData ? (techData.ma20 || 0) : 0
+  var ma60 = techData ? (techData.ma60 || 0) : 0
+  var macdObj = techData ? (techData.macdObj || {}) : {}
+  var price = stock.price || 0
+  var amplitude = stock.amplitude || 0
+  var patterns = techData ? (techData.patterns || {}) : {}
+
+  // 1. 涨幅(0-15)
+  if (isGem) {
+    if (chg >= 1.5 && chg <= 4) score += 15
+    else if (chg >= 1 && chg < 1.5) score += 12
+    else if (chg > 4 && chg <= 7) score += 10
+    else if (chg > 7 && chg <= 10) score += 5
+    else if (chg > 10) score += 2
+    else if (chg >= 0 && chg < 1) score += 6
+    else score += Math.max(0, 2 + chg)
+  } else {
+    if (chg >= 1.5 && chg <= 4) score += 15
+    else if (chg >= 1 && chg < 1.5) score += 12
+    else if (chg > 4 && chg <= 6) score += 8
+    else if (chg > 6) score += 2
+    else if (chg >= 0 && chg < 1) score += 6
+    else score += Math.max(0, 2 + chg)
+  }
+
+  // 2. 量比(0-10)
+  if (volumeRatio >= 1.5 && volumeRatio <= 2.5) score += 10
+  else if (volumeRatio >= 1.0 && volumeRatio < 1.5) score += 6
+  else if (volumeRatio > 2.5 && volumeRatio <= 4) score += 4
+  else if (volumeRatio > 4) score += 1
+  else if (volumeRatio >= 0.5) score += 2
+
+  // 3. 趋势形态(0-15)
+  var ts = 0
+  if (maSignal === "bull") ts += 5
+  if (price > 0 && ma5 > 0 && ma10 > 0) {
+    if (price > ma5 && price > ma10) ts += 3
+    else if (price > ma5 || price > ma10) ts += 1
+  }
+  if (goldenCross) ts += 3
+  else if (macdObj.dif > 0 && macdObj.dea > 0) ts += 1
+  if (change5d >= 5 && change5d <= 15) ts += 2
+  else if (change5d >= 3) ts += 1
+  if (momentum20 >= 5 && momentum20 <= 20) ts += 2
+  else if (momentum20 >= 0) ts += 1
+  score += ts
+
+  // 4. 量价形态(0-10)
+  var ps = 0
+  if (chg >= 1 && volumeRatio >= 1.5 && maSignal === "bull") ps += 4
+  else if (chg >= 1 && volumeRatio >= 1.5) ps += 2
+  if (chg >= 1 && chg <= 4 && volumeRatio >= 1 && volumeRatio <= 2.5 && amplitude >= 2 && amplitude <= 6) ps += 3
+  if (rsi < 50 && rsi > 30 && volumeRatio >= 1.5 && goldenCross) ps += 3
+  score += ps
+
+  // 5. 形态识别(0-30) 核心新增！
+  var pt = (patterns.cupHandle || 0) + (patterns.breakout || 0) + (patterns.pullbackRestart || 0) + (patterns.consecutiveUp || 0) + (patterns.bottomReversal || 0) + (patterns.maSupport || 0)
+  score += Math.min(30, pt)
+
+  // 6. 振幅(0-3)
+  if (amplitude >= 3 && amplitude <= 6) score += 3
+  else if (amplitude >= 2 && amplitude < 3) score += 1
+
+  // 7. RSI(0-4)
+  if (rsi >= 50 && rsi <= 65) score += 4
+  else if (rsi >= 40 && rsi < 50) score += 2
+  else if (rsi > 65 && rsi <= 75) score += 1
+
+  // 8. BOLL(0-3)
+  if (bollPosition >= 0.5 && bollPosition < 0.8) score += 3
+  else if (bollPosition >= 0.3 && bollPosition < 0.5) score += 1
+
+  // 9. 基本面(0-5)
+  var f = 0
+  if ((stock.roe || 0) >= 15) f += 2
+  else if ((stock.roe || 0) >= 10) f += 1
+  if (stock.pe > 0 && stock.pe <= 25) f += 2
+  else if (stock.pe > 25 && stock.pe <= 40) f += 1
+  if ((stock.debtRatio || 0) > 0 && stock.debtRatio <= 50) f += 1
+  score += f
+
+  // 10. 共振(0-5)
+  var rc = 0
+  if (chg >= 1.5 && chg <= 4) rc++
+  if (volumeRatio >= 1.5 && volumeRatio <= 2.5) rc++
+  if (maSignal === "bull") rc++
+  if (goldenCross) rc++
+  if (pt >= 5) rc++
+  if (rc >= 5) score += 5
+  else if (rc >= 4) score += 3
+  else if (rc >= 3) score += 1
+
+  // 11. 风险过滤
+  if (chg > 6 && volumeRatio > 4) score -= 5
+  if (rsi > 78) score -= 4
+  if (change5d > 20) score -= 3
+  if (maSignal === "bear") score -= 5
+  if (ma60 > 0 && price > ma60 * 1.3) score -= 2
+
+  return Math.round(Math.min(100, Math.max(0, score)))
+}
+// V16 - 动量趋势强度版
+function calcTechScoreV16(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var score = 0
+  var chg = stock.changePct || 0
+  var isGem = code.startsWith("300") || code.startsWith("301") || code.startsWith("688")
+  var maSignal = techData ? (techData.maSignal || "neutral") : "neutral"
+  var momentum20 = techData ? (techData.momentum20 || 0) : 0
+  var ma5 = techData ? (techData.ma5 || 0) : 0
+  var ma10 = techData ? (techData.ma10 || 0) : 0
+  var ma20 = techData ? (techData.ma20 || 0) : 0
+  var ma60 = techData ? (techData.ma60 || 0) : 0
+  var macdObj = techData ? (techData.macdObj || {}) : {}
+  var price = stock.price || 0
+  var amplitude = stock.amplitude || 0
+  var adx = techData ? (techData.adx || 0) : 0
+  var plusDI = techData ? (techData.plusDI || 0) : 0
+  var minusDI = techData ? (techData.minusDI || 0) : 0
+  var obvTrend = techData ? (techData.obvTrend || 0) : 0
+  var obvSlope5 = techData ? (techData.obvSlope5 || 0) : 0
+  var ma5Slope = techData ? (techData.ma5Slope || 0) : 0
+  var ma10Slope = techData ? (techData.ma10Slope || 0) : 0
+  var atr = techData ? (techData.atr || 0) : 0
+  var patterns = techData ? (techData.patterns || {}) : {}
+
+  // 1. 涨幅(0-12)
+  if (isGem) {
+    if (chg >= 1.5 && chg <= 4) score += 12
+    else if (chg >= 1 && chg < 1.5) score += 9
+    else if (chg > 4 && chg <= 7) score += 7
+    else if (chg > 7 && chg <= 10) score += 3
+    else if (chg > 10) score += 1
+    else if (chg >= 0 && chg < 1) score += 4
+    else score += Math.max(0, 2 + chg)
+  } else {
+    if (chg >= 1.5 && chg <= 4) score += 12
+    else if (chg >= 1 && chg < 1.5) score += 9
+    else if (chg > 4 && chg <= 6) score += 5
+    else if (chg > 6) score += 1
+    else if (chg >= 0 && chg < 1) score += 4
+    else score += Math.max(0, 2 + chg)
+  }
+
+  // 2. 量比(0-8)
+  if (volumeRatio >= 1.5 && volumeRatio <= 2.5) score += 8
+  else if (volumeRatio >= 1.0 && volumeRatio < 1.5) score += 5
+  else if (volumeRatio > 2.5 && volumeRatio <= 4) score += 3
+  else if (volumeRatio > 4) score += 1
+  else if (volumeRatio >= 0.5) score += 1
+
+  // 3. 趋势形态(0-12)
+  var ts = 0
+  if (maSignal === "bull") ts += 4
+  if (price > 0 && ma5 > 0 && ma10 > 0) {
+    if (price > ma5 && price > ma10) ts += 2
+    else if (price > ma5 || price > ma10) ts += 1
+  }
+  if (goldenCross) ts += 3
+  else if (macdObj.dif > 0 && macdObj.dea > 0) ts += 1
+  if (change5d >= 5 && change5d <= 15) ts += 2
+  else if (change5d >= 3) ts += 1
+  if (momentum20 >= 5 && momentum20 <= 20) ts += 1
+  score += ts
+
+  // 4. 量价形态(0-8)
+  var ps = 0
+  if (chg >= 1 && volumeRatio >= 1.5 && maSignal === "bull") ps += 3
+  else if (chg >= 1 && volumeRatio >= 1.5) ps += 1
+  if (chg >= 1 && chg <= 4 && volumeRatio >= 1 && volumeRatio <= 2.5 && amplitude >= 2 && amplitude <= 6) ps += 3
+  if (rsi < 50 && rsi > 30 && volumeRatio >= 1.5 && goldenCross) ps += 2
+  score += ps
+
+  // 5. ADX趋势强度(0-8)
+  if (adx >= 30 && plusDI > minusDI) score += 8
+  else if (adx >= 25 && plusDI > minusDI) score += 6
+  else if (adx >= 20 && plusDI > minusDI) score += 4
+  else if (adx >= 20) score += 2
+  else if (adx >= 15 && plusDI > minusDI) score += 2
+
+  // 6. OBV确认(0-7)
+  if (obvTrend === 1 && obvSlope5 > 0.1) score += 7
+  else if (obvTrend === 1 && obvSlope5 > 0) score += 5
+  else if (obvTrend === 1) score += 3
+  else if (obvSlope5 > 0.1) score += 2
+  else if (obvSlope5 < -0.1) score -= 3
+
+  // 7. ATR波动率适配(0-5)
+  if (atr > 0 && price > 0) {
+    var atrPct = atr / price * 100
+    if (atrPct >= 2 && atrPct <= 4) score += 5
+    else if (atrPct >= 1.5 && atrPct < 2) score += 3
+    else if (atrPct > 4 && atrPct <= 5) score += 2
+    else if (atrPct > 5) score -= 1
+  }
+
+  // 8. 均线斜率(0-5)
+  if (ma5Slope > 0.3 && ma10Slope > 0.2) score += 5
+  else if (ma5Slope > 0.2 && ma10Slope > 0.1) score += 3
+  else if (ma5Slope > 0.1 && ma10Slope > 0) score += 2
+  else if (ma5Slope < -0.3) score -= 2
+
+  // 9. 形态识别(0-15) 简化版
+  var pt = (patterns.cupHandle || 0) + (patterns.breakout || 0) + (patterns.pullbackRestart || 0) + (patterns.consecutiveUp || 0) + (patterns.bottomReversal || 0) + (patterns.maSupport || 0)
+  score += Math.min(15, pt)
+
+  // 10. 振幅(0-3)
+  if (amplitude >= 3 && amplitude <= 6) score += 3
+  else if (amplitude >= 2 && amplitude < 3) score += 1
+
+  // 11. RSI(0-4)
+  if (rsi >= 50 && rsi <= 65) score += 4
+  else if (rsi >= 40 && rsi < 50) score += 2
+  else if (rsi > 65 && rsi <= 75) score += 1
+
+  // 12. BOLL(0-3)
+  if (bollPosition >= 0.5 && bollPosition < 0.8) score += 3
+  else if (bollPosition >= 0.3 && bollPosition < 0.5) score += 1
+
+  // 13. 基本面(0-5)
+  var f = 0
+  if ((stock.roe || 0) >= 15) f += 2
+  else if ((stock.roe || 0) >= 10) f += 1
+  if (stock.pe > 0 && stock.pe <= 25) f += 2
+  else if (stock.pe > 25 && stock.pe <= 40) f += 1
+  if ((stock.debtRatio || 0) > 0 && stock.debtRatio <= 50) f += 1
+  score += f
+
+  // 14. 共振(0-5)
+  var rc = 0
+  if (chg >= 1.5 && chg <= 4) rc++
+  if (volumeRatio >= 1.5 && volumeRatio <= 2.5) rc++
+  if (maSignal === "bull") rc++
+  if (adx >= 20 && plusDI > minusDI) rc++
+  if (obvTrend === 1) rc++
+  if (rc >= 5) score += 5
+  else if (rc >= 4) score += 3
+  else if (rc >= 3) score += 1
+
+  // 15. 风险过滤
+  if (chg > 6 && volumeRatio > 4) score -= 5
+  if (rsi > 78) score -= 4
+  if (change5d > 20) score -= 3
+  if (maSignal === "bear") score -= 5
+  if (ma60 > 0 && price > ma60 * 1.3) score -= 2
+  if (obvTrend === -1 && chg > 3) score -= 3
+
+  return Math.round(Math.min(100, Math.max(0, score)))
+}
+
+
+// V17 - V10基础 + 形态/动量确认加分版
+function calcTechScoreV17(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  // 先算V10基础分
+  var baseScore = calcTechScoreV10(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData)
+  var bonus = 0
+  var patterns = techData ? (techData.patterns || {}) : {}
+  var adx = techData ? (techData.adx || 0) : 0
+  var plusDI = techData ? (techData.plusDI || 0) : 0
+  var minusDI = techData ? (techData.minusDI || 0) : 0
+  var obvTrend = techData ? (techData.obvTrend || 0) : 0
+  var obvSlope5 = techData ? (techData.obvSlope5 || 0) : 0
+  var ma5Slope = techData ? (techData.ma5Slope || 0) : 0
+  var ma10Slope = techData ? (techData.ma10Slope || 0) : 0
+  var price = stock.price || 0
+  var chg = stock.changePct || 0
+
+  // 1. 形态加分(0-10)
+  var patternBonus = 0
+  if (patterns.cupHandle >= 3) patternBonus += 3
+  if (patterns.breakout >= 3) patternBonus += 3
+  if (patterns.pullbackRestart >= 3) patternBonus += 3
+  if (patterns.consecutiveUp >= 3) patternBonus += 2
+  if (patterns.bottomReversal >= 3) patternBonus += 2
+  if (patterns.maSupport >= 3) patternBonus += 2
+  bonus += Math.min(10, patternBonus)
+
+  // 2. ADX/OBV确认(0-8)
+  if (adx >= 25 && plusDI > minusDI) bonus += 4
+  else if (adx >= 20 && plusDI > minusDI) bonus += 2
+  if (obvTrend === 1) bonus += 2
+  if (obvSlope5 > 0.05) bonus += 2
+
+  // 3. 均线斜率(0-4)
+  if (ma5Slope > 0.2 && ma10Slope > 0.1) bonus += 4
+  else if (ma5Slope > 0.1 && ma10Slope > 0) bonus += 2
+
+  // 4. 量价背离扣分
+  if (obvTrend === -1 && chg > 3) bonus -= 5
+
+  return Math.round(Math.min(100, Math.max(0, baseScore + bonus)))
+}
+// V18 - V10基础 + 更大形态/动量加分 + 无形态减分
+function calcTechScoreV18(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var baseScore = calcTechScoreV10(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData)
+  var bonus = 0
+  var patterns = techData ? (techData.patterns || {}) : {}
+  var adx = techData ? (techData.adx || 0) : 0
+  var plusDI = techData ? (techData.plusDI || 0) : 0
+  var minusDI = techData ? (techData.minusDI || 0) : 0
+  var obvTrend = techData ? (techData.obvTrend || 0) : 0
+  var obvSlope5 = techData ? (techData.obvSlope5 || 0) : 0
+  var ma5Slope = techData ? (techData.ma5Slope || 0) : 0
+  var ma10Slope = techData ? (techData.ma10Slope || 0) : 0
+  var price = stock.price || 0
+  var chg = stock.changePct || 0
+
+  // 1. 形态加分(0-20) - 更大加分
+  var patternBonus = 0
+  patternBonus += (patterns.cupHandle || 0)
+  patternBonus += (patterns.breakout || 0)
+  patternBonus += (patterns.pullbackRestart || 0)
+  patternBonus += (patterns.consecutiveUp || 0)
+  patternBonus += (patterns.bottomReversal || 0)
+  patternBonus += (patterns.maSupport || 0)
+  bonus += Math.min(20, patternBonus)
+
+  // 2. 无形态减分 - 如果没有任何形态得分
+  if (patternBonus === 0) bonus -= 5
+
+  // 3. ADX/OBV确认(0-10)
+  if (adx >= 30 && plusDI > minusDI) bonus += 5
+  else if (adx >= 25 && plusDI > minusDI) bonus += 3
+  else if (adx >= 20 && plusDI > minusDI) bonus += 1
+  if (obvTrend === 1 && obvSlope5 > 0.05) bonus += 3
+  else if (obvTrend === 1) bonus += 2
+  else if (obvSlope5 > 0.05) bonus += 1
+
+  // 4. 均线斜率(0-5)
+  if (ma5Slope > 0.3 && ma10Slope > 0.2) bonus += 5
+  else if (ma5Slope > 0.2 && ma10Slope > 0.1) bonus += 3
+  else if (ma5Slope > 0.1) bonus += 1
+
+  // 5. 量价背离扣分
+  if (obvTrend === -1 && chg > 3) bonus -= 5
+  if (obvSlope5 < -0.1 && chg > 2) bonus -= 3
+
+  return Math.round(Math.min(100, Math.max(0, baseScore + bonus)))
+}
+
+
+// V19 - V10与形态动量的混合排名版
+// 最终分 = V10分数(50%) + 形态动量质量分(50%)
+function calcTechScoreV19(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var v10Score = calcTechScoreV10(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData)
+  var patterns = techData ? (techData.patterns || {}) : {}
+  var adx = techData ? (techData.adx || 0) : 0
+  var plusDI = techData ? (techData.plusDI || 0) : 0
+  var minusDI = techData ? (techData.minusDI || 0) : 0
+  var obvTrend = techData ? (techData.obvTrend || 0) : 0
+  var obvSlope5 = techData ? (techData.obvSlope5 || 0) : 0
+  var ma5Slope = techData ? (techData.ma5Slope || 0) : 0
+  var ma10Slope = techData ? (techData.ma10Slope || 0) : 0
+
+  // 形态质量分(0-30)
+  var patternScore = (patterns.cupHandle || 0) + (patterns.breakout || 0) + (patterns.pullbackRestart || 0) + (patterns.consecutiveUp || 0) + (patterns.bottomReversal || 0) + (patterns.maSupport || 0)
+  patternScore = Math.min(30, patternScore)
+
+  // 动量质量分(0-20)
+  var momentumScore = 0
+  if (adx >= 25 && plusDI > minusDI) momentumScore += 8
+  else if (adx >= 20 && plusDI > minusDI) momentumScore += 4
+  if (obvTrend === 1) momentumScore += 5
+  if (obvSlope5 > 0.05) momentumScore += 4
+  if (ma5Slope > 0.2 && ma10Slope > 0.1) momentumScore += 3
+  momentumScore = Math.min(20, momentumScore)
+
+  // 混合分 = V10 × 0.5 + 质量分
+  var qualityScore = patternScore + momentumScore
+  var finalScore = v10Score * 0.5 + qualityScore
+
+  return Math.round(Math.min(100, Math.max(0, finalScore)))
+}
+
+// V20 - V10评分 + 形态过滤(至少一个强形态)
+function calcTechScoreV20(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var patterns = techData ? (techData.patterns || {}) : {}
+  // 必须至少有一个形态得分>=3
+  var hasPattern = (patterns.cupHandle >= 3 || patterns.breakout >= 3 || patterns.pullbackRestart >= 3 || patterns.consecutiveUp >= 3 || patterns.bottomReversal >= 3 || patterns.maSupport >= 3)
+  if (!hasPattern) return 0 // 无形态直接0分不入选
+  return calcTechScoreV10(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData)
+}
+
+// V21 - V16评分 + 形态过滤
+function calcTechScoreV21(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var patterns = techData ? (techData.patterns || {}) : {}
+  var hasPattern = (patterns.cupHandle >= 3 || patterns.breakout >= 3 || patterns.pullbackRestart >= 3 || patterns.consecutiveUp >= 3 || patterns.bottomReversal >= 3 || patterns.maSupport >= 3)
+  if (!hasPattern) return 0
+  return calcTechScoreV16(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData)
+}
+
 module.exports = {
+  calcTechScoreV19,
+  calcTechScoreV20,
+  calcTechScoreV21,
+  calcTechScoreV17,
+  calcTechScoreV18,
+  calcTechScoreV15,
+  calcTechScoreV16,
   calcTechScoreV13,
   calcTechScoreV14,
   calcTechScoreV12,
