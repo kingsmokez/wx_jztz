@@ -174,17 +174,17 @@
           </view>
         </view>
 
-        <!-- V49e持有策略 -->
+        <!-- V53持有策略 -->
         <view class="hold-strategy" wx:if="{{item.holdStrategy}}">
           <view class="hs-header">
-            <text class="hs-title">📊 持有策略 (V49e回测最优)</text>
-            <text class="hs-tag">WR=67.12% AR=3.93%</text>
+            <text class="hs-title">📊 持有策略 (V53回测最优)</text>
+            <text class="hs-tag">WR=73.24% AR=3.96%</text>
           </view>
           <view class="hs-rules">
             <text class="hs-rule">最大持有 {{item.holdStrategy.maxHoldDays}} 天</text>
-            <text class="hs-rule">盈利5%回撤2%卖出</text>
-            <text class="hs-rule">盈利8%回撤3%卖出</text>
-            <text class="hs-rule">盈利12%回撤4%卖出</text>
+            <text class="hs-rule">盈利3%回撤1.5%卖出</text>
+            <text class="hs-rule">盈利6%回撤2%卖出</text>
+            <text class="hs-rule">盈利10%回撤3%卖出</text>
           </view>
         </view>
       </view>
