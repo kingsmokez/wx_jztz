@@ -350,9 +350,128 @@ function calcTechFromKlines(klines) {
   }
 }
 
+
+// ===== V31: Volume-Price Coordination (0-100) =====
+function calcVolumePriceCoord(klines) {
+  if (!klines || klines.length < 10) return { score: 50, trend: "neutral" }
+  var recent = klines.slice(-10)
+  var upWithVol = 0, upNoVol = 0, downWithVol = 0, downNoVol = 0
+  for (var i = 1; i < recent.length; i++) {
+    var priceUp = recent[i].close > recent[i - 1].close
+    var volUp = recent[i].volume > recent[i - 1].volume
+    if (priceUp && volUp) upWithVol++
+    else if (priceUp && !volUp) upNoVol++
+    else if (!priceUp && volUp) downWithVol++
+    else downNoVol++
+  }
+  var total = recent.length - 1
+  var coordRatio = upWithVol / total
+  var divergeRatio = upNoVol / total
+  var score = 50
+  if (coordRatio >= 0.5) score = 80 + (coordRatio - 0.5) * 40
+  else if (coordRatio >= 0.3) score = 60 + (coordRatio - 0.3) * 100
+  else if (divergeRatio >= 0.5) score = 20
+  else score = 40
+  var trend = "neutral"
+  if (coordRatio >= 0.4) trend = "bullish"
+  else if (divergeRatio >= 0.4) trend = "bearish_divergence"
+  return { score: Math.min(100, Math.max(0, Math.round(score))), trend: trend, upWithVol: upWithVol, upNoVol: upNoVol }
+}
+
+// ===== V31: Trend Acceleration =====
+function calcTrendAcceleration(closes) {
+  if (!closes || closes.length < 20) return { accelerating: false, score: 0, accelRatio: 0 }
+  var recentSlope = calcMASlope(closes, 5)
+  var prevCloses = closes.slice(0, -3)
+  var prevSlope = calcMASlope(prevCloses, 5)
+  if (prevSlope === 0 && recentSlope === 0) return { accelerating: false, score: 0, accelRatio: 0 }
+  var accelRatio = (recentSlope - prevSlope) / (Math.abs(prevSlope) || 0.001)
+  var accelerating = false
+  var score = 0
+  if (recentSlope > 0 && accelRatio > 0.5) {
+    accelerating = true
+    if (accelRatio > 2) score = 100
+    else if (accelRatio > 1) score = 80
+    else score = 60
+  } else if (recentSlope > 0 && accelRatio > 0) {
+    score = 30
+  }
+  return { accelerating: accelerating, score: score, accelRatio: accelRatio, recentSlope: recentSlope, prevSlope: prevSlope }
+}
+
+// ===== V31: Consolidation Breakout (enhanced) =====
+function detectConsolidationBreakout(klines) {
+  if (!klines || klines.length < 25) return { detected: false, score: 0 }
+  var recent = klines.slice(-25)
+  var today = recent[recent.length - 1]
+  var todayChg = (today.close - today.open) / today.open * 100
+  var bestScore = 0
+  for (var start = recent.length - 16; start <= recent.length - 6; start++) {
+    if (start < 0) continue
+    var range = recent.slice(start, -1)
+    if (range.length < 5) continue
+    var smallChgCount = 0
+    var volDeclining = true
+    var rangeHigh = -Infinity, rangeLow = Infinity
+    for (var i = 0; i < range.length; i++) {
+      var chg = Math.abs((range[i].close - range[i].open) / range[i].open * 100)
+      if (chg <= 2.5) smallChgCount++
+      rangeHigh = Math.max(rangeHigh, range[i].high)
+      rangeLow = Math.min(rangeLow, range[i].low)
+      if (i > 0 && range[i].volume > range[i - 1].volume * 1.1) volDeclining = false
+    }
+    var rangeAmplitude = (rangeHigh - rangeLow) / rangeLow * 100
+    if (rangeAmplitude > 15) continue
+    if (smallChgCount / range.length < 0.6) continue
+    var breakout = today.close > rangeHigh && todayChg >= 1.5
+    var avgVol = 0
+    for (var i = 0; i < range.length; i++) avgVol += range[i].volume
+    avgVol /= range.length
+    var volRatio = avgVol > 0 ? today.volume / avgVol : 0
+    var score = 0
+    if (breakout && volRatio >= 1.5) score = 100
+    else if (breakout && volRatio >= 1.2) score = 70
+    else if (today.close > rangeHigh * 0.98 && todayChg >= 1 && volRatio >= 1.3) score = 50
+    if (volDeclining && score > 0) score = Math.min(100, score + 10)
+    if (score > bestScore) bestScore = score
+  }
+  return { detected: bestScore >= 50, score: bestScore }
+}
+
+// ===== V31: Candle Patterns =====
+function calcCandlePatterns(klines) {
+  if (!klines || klines.length < 5) return { score: 0, patterns: [] }
+  var recent = klines.slice(-5)
+  var today = recent[recent.length - 1]
+  var score = 0
+  var detected = []
+  var todayBody = Math.abs(today.close - today.open)
+  var todayRange = today.high - today.low
+  if (today.close > today.open && todayRange > 0 && todayBody / todayRange > 0.7) {
+    var avgVol = 0
+    for (var i = 0; i < recent.length - 1; i++) avgVol += recent[i].volume
+    avgVol /= (recent.length - 1)
+    if (avgVol > 0 && today.volume / avgVol >= 1.5) { score += 12; detected.push("big_yang") }
+  }
+  if (recent.length >= 3) {
+    var threeUp = true
+    for (var i = recent.length - 3; i < recent.length; i++) {
+      if (recent[i].close <= recent[i].open) { threeUp = false; break }
+    }
+    if (threeUp) { score += 8; detected.push("three_white") }
+  }
+  var lowerShadow = Math.min(today.open, today.close) - today.low
+  if (todayRange > 0 && lowerShadow / todayRange > 0.4) { score += 5; detected.push("long_lower_shadow") }
+  if (recent.length >= 2) {
+    var gap = today.open - recent[recent.length - 2].close
+    if (gap > 0 && today.close > today.open) { score += 6; detected.push("gap_up") }
+  }
+  return { score: Math.min(30, score), patterns: detected }
+}
 module.exports = {
   calcMA, calcEMA, calcRSI, calcMACD, calcBollPosition, calcTechFromKlines,
   calcATR, calcADX, calcOBV, calcMASlope, detectPatterns,
   detectCupHandle, detectBreakout, detectPullbackRestart,
   detectConsecutiveUp, detectBottomReversal, detectMASupport,
+  calcVolumePriceCoord, calcTrendAcceleration, detectConsolidationBreakout, calcCandlePatterns,
 }
