@@ -1,4 +1,4 @@
-# node_modules
+﻿# node_modules
 node_modules/
 cloudfunctions/*/node_modules/
 
@@ -46,8 +46,11 @@ backtest/test*.js
 backtest/run.js
 backtest/run_v2.js
 
-# 截图和图片资源
+# 截图和图片资源（非小程序图标）
 *.png
 *.jpg
 !miniprogram/images/*.png
 !miniprogram/images/*.jpg
+
+# 临时备份
+*.bak
