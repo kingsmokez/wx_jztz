@@ -1,5 +1,7 @@
 /**
- * 短线强势股选股 V32b - 基于回测最优策略V32b_75_25
+ * 短线强势股选股 V34e - 自适应市场+软过滤+动态连涨+形态加分
+ * 回测2年: 10dWR=50.36%(首破50%), 10dAR=1.26%
+ * V33f基准
  * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
  * V31五维度: 资金活跃度(30)+趋势确认(25)+量价配合(20)+形态信号(15)+位置安全(10)
  * 回测2年数据全面超越V10基准(5dWR+2.11%, 10dWR+1.90%, 10dAR+0.25%)
@@ -228,6 +230,18 @@ function calcConsecutiveUpDays(klines) {
 
 
 
+/**
+ * V34e: 简化市场环境判断
+ */
+function calcSimpleMarketEnv(marketEnv) {
+  if (!marketEnv) return { trend: "neutral" }
+  var chg = marketEnv.changePct || 0
+  var status = marketEnv.status || "震荡"
+  if (status === "上涨" || chg > 0.5) return { trend: "bull" }
+  if (status === "下跌" || chg < -0.3) return { trend: "bear" }
+  return { trend: "neutral" }
+}
+
 function genReasons(stock, v5Reasons, goldenCross, volumeRatio, rsi, pullbackStable, pe, roe) {
   var parts = []
   if (v5Reasons) parts.push(v5Reasons)
@@ -408,23 +422,38 @@ async function runStrongPicker(topN, force) {
     var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
     var v10Score = blendedScore
     // ADX过滤: ADX>=20且+DI>-DI
-    var adxFiltered = false
-    if (tech && tech.adx !== undefined && (tech.adx < 20 || tech.plusDI <= tech.minusDI)) adxFiltered = true
+    var adxFiltered = false  // V34e: replaced by adaptive ADX penalty
     // 量价背离过滤
     var vpFiltered = false
     if (tech && tech.vpCoord && tech.vpCoord.trend === "bearish_divergence") vpFiltered = true
     // BOLL位置过滤: bollPosition>0.85
-    var bollFiltered = false
-    if (bollPosition > 0.85) bollFiltered = true
-    // V33: 连涨5天以上过滤(追高风险大)
-    // V33: 连涨>5天排除(追高风险)
+    var bollFiltered = false  // V34e: replaced by adaptive BOLL penalty
+    // V34e: 自适应市场环境
+    var simpleMktEnv = calcSimpleMarketEnv(marketEnv)
+    var adxThreshold = 20
+    var bollThreshold = 0.85
+    var maxConsecUp = 5
+    if (simpleMktEnv.trend === "bear") {
+      adxThreshold = 28  // 弱势市场要求更强趋势
+      bollThreshold = 0.70  // 弱势市场BOLL更严格
+      maxConsecUp = 3  // 弱势市场连涨3天就排除
+    } else if (simpleMktEnv.trend === "bull") {
+      bollThreshold = 0.90  // 强势市场BOLL放宽
+      maxConsecUp = 6  // 强势市场允许连涨6天
+    }
+    // V34e: 动态连涨限制
     if (klines && klines.length >= 2) {
       var consecUp = calcConsecutiveUpDays(klines)
-      if (consecUp > 5) continue
+      if (consecUp > maxConsecUp) continue
     }
-    // V33: 量比确认(>=1.2)
-    var volConfirm = volumeRatio >= 1.2
-    // V33: 形态加分
+    // V34e: 自适应ADX/BOLL过滤(降权而非排除)
+    var adxPenalty = 1.0
+    if (tech && tech.adx !== undefined && (tech.adx < adxThreshold || tech.plusDI <= tech.minusDI)) adxPenalty = 0.7
+    var bollPenalty = 1.0
+    if (bollPosition > bollThreshold) bollPenalty = 0.8
+    // V34e: 软量比确认(降权0.9而非0.85)
+    var volPenalty = volumeRatio < 1.2 ? 0.9 : 1.0
+    // V34e: 形态加分
     var morphBonus = 0
     if (tech) {
       if (tech.consolidationBreakout && tech.consolidationBreakout.score >= 70) morphBonus += 5
@@ -432,11 +461,14 @@ async function runStrongPicker(topN, force) {
       if (tech.candlePatterns && tech.candlePatterns.score >= 15) morphBonus += 3
     }
     var rankingScore = v31Score * 0.75 + v10Score * 0.25 + morphBonus
-    if (adxFiltered) rankingScore *= 0.7
+    // V34e: 统一软过滤
+    rankingScore *= adxPenalty
     if (vpFiltered) rankingScore *= 0.6
-    if (bollFiltered) rankingScore *= 0.8
-    if (!volConfirm) rankingScore *= 0.85
+    rankingScore *= bollPenalty
+    rankingScore *= volPenalty
     rankingScore = Math.round(rankingScore)
+    // V34e: minScore=60，选股少但精
+    if (rankingScore < 60) continue
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
