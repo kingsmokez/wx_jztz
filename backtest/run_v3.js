@@ -20,7 +20,7 @@ if (!fs.existsSync(CONFIG.cacheDir)) fs.mkdirSync(CONFIG.cacheDir, { recursive: 
 if (!fs.existsSync(CONFIG.outputDir)) fs.mkdirSync(CONFIG.outputDir, { recursive: true })
 
 var { calcTechFromKlines } = require("./indicators")
-var { getLimitPct, calcTechScoreOriginal, calcTechScoreOptimized, calcTechScoreV10, calcTechScoreV11, calcTechScoreV12, calcTechScoreV13 } = require("./scoring")
+var { getLimitPct, calcTechScoreOriginal, calcTechScoreOptimized, calcTechScoreV10, calcTechScoreV11, calcTechScoreV12, calcTechScoreV13, calcTechScoreV14 } = require("./scoring")
 
 function request(url, timeout) {
   return new Promise(function(resolve, reject) {
@@ -184,6 +184,12 @@ function simulatePick(dayQuotes, klineMap, dateIdxMap, scoreFunc, topN) {
       score = calcTechScoreV10(stock, techData.rsi, techData.goldenCross, volumeRatio, techData.bollPosition, stock.code, techData.change5d, techData)
     } else if (scoreFunc === "v13") {
       score = calcTechScoreV13(stock, techData.rsi, techData.goldenCross, volumeRatio, techData.bollPosition, stock.code, techData.change5d, techData)
+    } else if (scoreFunc === "v14") {
+      // V14: V10评分 + 更严格筛选
+      if (stock.changePct < 0) continue
+      if (techData.rsi > 78) continue
+      if (techData.maSignal === "bear") continue
+      score = calcTechScoreV10(stock, techData.rsi, techData.goldenCross, volumeRatio, techData.bollPosition, stock.code, techData.change5d, techData)
     } else if (scoreFunc === "v12") {
       score = calcTechScoreV12(stock, techData.rsi, techData.goldenCross, volumeRatio, techData.bollPosition, stock.code, techData.change5d, techData)
     } else if (scoreFunc === "v11") {
@@ -191,7 +197,8 @@ function simulatePick(dayQuotes, klineMap, dateIdxMap, scoreFunc, topN) {
     } else {
       score = calcTechScoreOptimized(stock, techData.rsi, techData.goldenCross, volumeRatio, techData.bollPosition, stock.code, techData.change5d, techData)
     }
-    if (score >= CONFIG.minScore) {
+    var minS = CONFIG.minScore
+    if (score >= minS) {
       scored.push({ code: stock.code, price: stock.price, changePct: stock.changePct, score: score, volumeRatio: volumeRatio, rsi: techData.rsi, maSignal: techData.maSignal })
     }
   }
@@ -278,7 +285,7 @@ async function runBacktest() {
 
   // 4. 回测
   console.log("\n[3/3] 逐日回测...")
-  var allPicksV8 = [], allPicksV9 = [], allPicksV10 = [], allPicksV11 = [], allPicksV12 = [], allPicksV13 = []
+  var allPicksV8 = [], allPicksV9 = [], allPicksV10 = [], allPicksV11 = [], allPicksV12 = [], allPicksV13 = [], allPicksV14 = []
   var processed = 0
 
   var startIdx = 0; for (var si = 0; si < tradeDates.length; si++) { if (tradeDates[si] >= "2024-07-01") { startIdx = si; break } } for (var di = startIdx; di < tradeDates.length - 10; di += 3) {
@@ -319,6 +326,7 @@ async function runBacktest() {
     var picksV11 = simulatePick(dayQuotes, klineMap, dateIdxMap, "v11", CONFIG.topN)
     var picksV12 = simulatePick(dayQuotes, klineMap, dateIdxMap, "v12", CONFIG.topN)
     var picksV13 = simulatePick(dayQuotes, klineMap, dateIdxMap, "v13", CONFIG.topN)
+    var picksV14 = simulatePick(dayQuotes, klineMap, dateIdxMap, "v14", CONFIG.topN)
 
     for (var p = 0; p < picksOrig.length; p++) {
       var pick = picksOrig[p]
@@ -345,6 +353,11 @@ async function runBacktest() {
       var returns = calcHoldingReturn(pick.price, klineMap[pick.code], dateIdxMap[pick.code], CONFIG.holdDays)
       if (returns) allPicksV13.push({ date: dateStr, code: pick.code, price: pick.price, changePct: pick.changePct, score: pick.score, returns: returns })
     }
+    for (var p = 0; p < picksV14.length; p++) {
+      var pick = picksV14[p]
+      var returns = calcHoldingReturn(pick.price, klineMap[pick.code], dateIdxMap[pick.code], CONFIG.holdDays)
+      if (returns) allPicksV14.push({ date: dateStr, code: pick.code, price: pick.price, changePct: pick.changePct, score: pick.score, returns: returns })
+    }
     for (var p = 0; p < picksOpt.length; p++) {
       var pick = picksOpt[p]
       var returns = calcHoldingReturn(pick.price, klineMap[pick.code], dateIdxMap[pick.code], CONFIG.holdDays)
@@ -358,6 +371,7 @@ console.log("V10选股: " + allPicksV10.length + " 次")
 console.log("V11选股: " + allPicksV11.length + " 次")
 console.log("V12选股: " + allPicksV12.length + " 次")
 console.log("V13选股: " + allPicksV13.length + " 次")
+console.log("V14选股: " + allPicksV14.length + " 次")
 
   var sV8 = calcStats(allPicksV8, "原始策略V8")
   var sV9 = calcStats(allPicksV9, "优化策略V9")
@@ -365,6 +379,7 @@ console.log("V13选股: " + allPicksV13.length + " 次")
   var sV11 = calcStats(allPicksV11, "终极优化V11")
   var sV12 = calcStats(allPicksV12, "终极V12")
   var sV13 = calcStats(allPicksV13, "区分度V13")
+  var sV14 = calcStats(allPicksV14, "可持续V14")
 
   // 输出
   var lines = []
@@ -372,7 +387,7 @@ console.log("V13选股: " + allPicksV13.length + " 次")
   lines.push("短线强势股策略回测报告")
   lines.push("区间: " + CONFIG.startDate + " ~ " + CONFIG.endDate)
   lines.push("=".repeat(70))
-  var allStats = [sV8, sV9, sV10, sV11, sV12, sV13]
+  var allStats = [sV8, sV9, sV10, sV11, sV12, sV13, sV14]
   for (var s = 0; s < allStats.length; s++) {
     var st = allStats[s]
     lines.push("\n--- " + st.name + " ---")
@@ -386,6 +401,13 @@ console.log("V13选股: " + allPicksV13.length + " 次")
       lines.push("  [按分数-持有5天]")
       for (var label in st.byBracket) { var b = st.byBracket[label]; lines.push("    " + label + ": " + b.count + "只 胜率" + b.winRate5d + "% 均收" + b.avgReturn5d + "%") }
     }
+  }
+  lines.push("\n=== V14 vs V8 ===")
+  for (var h = 0; h < CONFIG.holdDays.length; h++) {
+    var orig = sV8["hold" + CONFIG.holdDays[h]], opt = sV14["hold" + CONFIG.holdDays[h]]
+    if (!orig || !opt || orig.total === 0 || opt.total === 0) continue
+    var dw = (opt.winRate - orig.winRate).toFixed(2), dr = (opt.avgReturn - orig.avgReturn).toFixed(2)
+    lines.push("  持" + CONFIG.holdDays[h] + "天: 胜率" + orig.winRate + "%->" + opt.winRate + "%(" + (dw >= 0 ? "+" : "") + dw + "%) 均收" + orig.avgReturn + "%->" + opt.avgReturn + "%(" + (dr >= 0 ? "+" : "") + dr + "%)")
   }
   lines.push("\n=== V13 vs V8 ===")
   for (var h = 0; h < CONFIG.holdDays.length; h++) {
@@ -418,7 +440,7 @@ console.log("V13选股: " + allPicksV13.length + " 次")
 
   var report = lines.join("\n")
   fs.writeFileSync(path.join(CONFIG.outputDir, "backtest_report_v3.txt"), report, "utf8")
-  fs.writeFileSync(path.join(CONFIG.outputDir, "backtest_data_v3.json"), JSON.stringify({ sV8: sV8, sV9: sV9, sV10: sV10, sV11: sV11, sV12: sV12, sV13: sV13 }, null, 2), "utf8")
+  fs.writeFileSync(path.join(CONFIG.outputDir, "backtest_data_v3.json"), JSON.stringify({ sV8: sV8, sV9: sV9, sV10: sV10, sV11: sV11, sV12: sV12, sV13: sV13, sV14: sV14 }, null, 2), "utf8")
   console.log("\n" + report)
   console.log("\n报告已保存到: " + CONFIG.outputDir)
 }
