@@ -9,7 +9,7 @@ function callFunction(name, action, data) {
     wx.cloud.callFunction({
       name: name,
       data: { action: action, data: data },
-      timeout: 60000,
+      timeout: 120000,
       success: function(res) {
         if (res.result && res.result.success) {
           resolve(res.result)
@@ -27,7 +27,7 @@ function callFunction(name, action, data) {
 
 function callFunctionWithTimeout(name, action, data, timeoutMs, fallback) {
   if (!data) data = {}
-  if (!timeoutMs) timeoutMs = 60000
+  if (!timeoutMs) timeoutMs = 120000
   return new Promise(function(resolve) {
     var done = false
     var timer = setTimeout(function() {

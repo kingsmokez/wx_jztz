@@ -25,3 +25,9 @@ Thumbs.db
 
 # Agent 配置
 .agents/
+
+# 测试和临时文件
+_test_*
+_backup*
+http_full_backup.txt
+cloudfunctions/_check.js

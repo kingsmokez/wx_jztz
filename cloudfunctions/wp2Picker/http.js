@@ -1,21 +1,24 @@
-/**
- * HTTP工具 - 东财datacenter全市场行情 + 腾讯K线
- * V7: 东财全市场5000+股票快速获取 + GBK解码修复
+﻿/**
+ * HTTP工具 V8 - 优化版，解决超时问题
+ * 核心优化：
+ *   1. 不再全量获取6000只股票，改为按需获取Top200-300
+ *   2. 新增 fetchEMTopStocks() 替代 fetchEMAllStocks()
+ *   3. 新增 fetchEMByField() 按指定字段排序获取
+ *   4. GBK解码修复
+ *   5. 东财行业分类字段 f100 正确解析
  */
 var http = require("http")
 var https = require("https")
 var Iconv = null
 try { Iconv = require("iconv-lite") } catch(e) {}
 
-// 修复东财股票名称乱码：如果JSON解析后中文乱码，尝试通过GBK重新解码
+// ===== GBK解码修复 =====
 function decodeName(raw) {
   if (!raw || raw === "") return ""
   var rawStr = String(raw)
-  // 如果已经有中文字符，说明解码正常
   if (/[\u4e00-\u9fff]/.test(rawStr)) return rawStr
-  // 尝试通过 latin1 -> GBK 回退解码修复乱码
   try {
-    var buf = Buffer.from(rawStr.split('').map(function(c){return c.charCodeAt(0)&0xFF}))
+    var buf = Buffer.from(rawStr, "latin1")
     if (Iconv) {
       var decoded = Iconv.decode(buf, "gbk")
       if (/[\u4e00-\u9fff]/.test(decoded)) return decoded
@@ -47,16 +50,44 @@ function request(url, options) {
   })
 }
 
-// ===== 东财全市场行情（datacenter，每页1000只，6页覆盖全市场）=====
-async function fetchEMAllStocks(progressCallback) {
+// ===== 解析东财股票数据 =====
+function parseEMStock(s) {
+  if (!s) return null
+  var code = String(s.f12 || "")
+  if (!code || code.length !== 6) return null
+  return {
+    code: code,
+    name: decodeName(s.f14),
+    price: parseFloat(s.f2) || 0,
+    changePct: parseFloat(s.f3) || 0,
+    changeAmt: parseFloat(s.f4) || 0,
+    volume: parseFloat(s.f5) || 0,
+    amount: parseFloat(s.f6) || 0,
+    amplitude: parseFloat(s.f7) || 0,
+    turnover: parseFloat(s.f8) || 0,
+    pe: parseFloat(s.f9) || 0,
+    volumeRatio: parseFloat(s.f10) || 0,
+    market: String(s.f13 || "0"),
+    high: parseFloat(s.f15) || 0,
+    low: parseFloat(s.f16) || 0,
+    open: parseFloat(s.f17) || 0,
+    prevClose: parseFloat(s.f18) || 0,
+    totalCap: parseFloat(s.f20) || 0,
+    circCap: parseFloat(s.f21) || 0,
+    pb: parseFloat(s.f23) || 0,
+    industry: decodeName(s.f100) || "",
+  }
+}
+
+// ===== 东财全市场行情（原版6页，保留但标注不推荐）=====
+async function fetchEMAllStocks() {
   var allStocks = {}
-  var totalPages = 6
-  for (var p = 1; p <= totalPages; p++) {
+  for (var p = 1; p <= 6; p++) {
     try {
       var url = "https://push2.eastmoney.com/api/qt/clist/get" +
         "?pn=" + p + "&pz=1000&po=1&np=1&fltt=2&invt=2&fid=f3" +
         "&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23" +
-        "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f24,f25,f62"
+        "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f100"
       var text = await request(url, {
         timeout: 10000,
         headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" }
@@ -65,71 +96,90 @@ async function fetchEMAllStocks(progressCallback) {
       if (!data || !data.data || !data.data.diff) continue
       var items = data.data.diff
       for (var i = 0; i < items.length; i++) {
-        var s = items[i]
-        var code = String(s.f12 || "")
-        if (!code || code.length !== 6) continue
-        allStocks[code] = {
-          code: code,
-          name: decodeName(s.f14),
-          price: parseFloat(s.f2) || 0,
-          changePct: parseFloat(s.f3) || 0,
-          changeAmt: parseFloat(s.f4) || 0,
-          volume: parseFloat(s.f5) || 0,
-          amount: parseFloat(s.f6) || 0,
-          amplitude: parseFloat(s.f7) || 0,
-          turnover: parseFloat(s.f8) || 0,
-          pe: parseFloat(s.f9) || 0,
-          volumeRatio: parseFloat(s.f10) || 0,
-          market: String(s.f13 || "0"),
-          high: parseFloat(s.f15) || 0,
-          low: parseFloat(s.f16) || 0,
-          open: parseFloat(s.f17) || 0,
-          prevClose: parseFloat(s.f18) || 0,
-          totalCap: parseFloat(s.f20) || 0,
-          circCap: parseFloat(s.f21) || 0,
-          pb: parseFloat(s.f23) || 0,
-        }
+        var stock = parseEMStock(items[i])
+        if (stock) allStocks[stock.code] = stock
       }
-      if (progressCallback) progressCallback(p, totalPages, Object.keys(allStocks).length)
     } catch(e) { console.warn("东财第" + p + "页失败:", e.message) }
   }
   return allStocks
 }
 
-// ===== 东财涨幅榜（快速获取Top N）=====
+// ===== 东财Top股票（优化版：只获取2页Top300，替代全量6页）=====
+async function fetchEMTopStocks(pages, pageSize) {
+  if (!pages) pages = 2
+  if (!pageSize) pageSize = 200
+  var allStocks = {}
+  for (var p = 1; p <= pages; p++) {
+    try {
+      var url = "https://push2.eastmoney.com/api/qt/clist/get" +
+        "?pn=" + p + "&pz=" + pageSize + "&po=1&np=1&fltt=2&invt=2&fid=f3" +
+        "&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23" +
+        "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f100"
+      var text = await request(url, {
+        timeout: 8000,
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" }
+      })
+      var data = JSON.parse(text)
+      if (!data || !data.data || !data.data.diff) continue
+      var items = data.data.diff
+      for (var i = 0; i < items.length; i++) {
+        var stock = parseEMStock(items[i])
+        if (stock) allStocks[stock.code] = stock
+      }
+    } catch(e) { console.warn("东财涨幅榜第" + p + "页失败:", e.message) }
+  }
+  return allStocks
+}
+
+// ===== 按指定字段排序获取Top股票 =====
+// fid: f3=涨幅, f8=换手率, f10=量比, f6=成交额
+async function fetchEMByField(fid, topN) {
+  if (!topN) topN = 200
+  var allStocks = {}
+  var pages = Math.ceil(topN / 200)
+  for (var p = 1; p <= pages; p++) {
+    try {
+      var url = "https://push2.eastmoney.com/api/qt/clist/get" +
+        "?pn=" + p + "&pz=200&po=1&np=1&fltt=2&invt=2&fid=" + fid +
+        "&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23" +
+        "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f100"
+      var text = await request(url, {
+        timeout: 8000,
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" }
+      })
+      var data = JSON.parse(text)
+      if (!data || !data.data || !data.data.diff) continue
+      var items = data.data.diff
+      for (var i = 0; i < items.length; i++) {
+        var stock = parseEMStock(items[i])
+        if (stock) allStocks[stock.code] = stock
+      }
+    } catch(e) { console.warn("东财排序" + fid + "第" + p + "页失败:", e.message) }
+  }
+  return allStocks
+}
+
+// ===== 东财涨幅榜（兼容旧接口）=====
 async function fetchEMRank(page, pageSize) {
   if (!pageSize) pageSize = 200
   try {
     var url = "https://push2.eastmoney.com/api/qt/clist/get" +
       "?pn=" + page + "&pz=" + pageSize + "&po=1&np=1&fltt=2&invt=2&fid=f3" +
       "&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23" +
-      "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23"
+      "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f100"
     var text = await request(url, {
       timeout: 8000,
       headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" }
     })
     var data = JSON.parse(text)
     if (!data || !data.data || !data.data.diff) return []
-    return data.data.diff.map(function(s) {
-      return {
-        code: String(s.f12 || ""), name: decodeName(s.f14),
-        price: parseFloat(s.f2) || 0, changePct: parseFloat(s.f3) || 0,
-        changeAmt: parseFloat(s.f4) || 0, volume: parseFloat(s.f5) || 0,
-        amount: parseFloat(s.f6) || 0, amplitude: parseFloat(s.f7) || 0,
-        turnover: parseFloat(s.f8) || 0, pe: parseFloat(s.f9) || 0,
-        volumeRatio: parseFloat(s.f10) || 0, market: String(s.f13 || "0"),
-        high: parseFloat(s.f15) || 0, low: parseFloat(s.f16) || 0,
-        open: parseFloat(s.f17) || 0, prevClose: parseFloat(s.f18) || 0,
-        totalCap: parseFloat(s.f20) || 0, circCap: parseFloat(s.f21) || 0,
-        pb: parseFloat(s.f23) || 0,
-      }
-    })
+    return data.data.diff.map(function(s) { return parseEMStock(s) }).filter(Boolean)
   } catch(e) { return [] }
 }
 
-// ===== 批量获取腾讯K线数据（用于RSI/MA/布林带计算）=====
+// ===== K线并发获取（优化版：并发30，单只4秒超时）=====
 async function fetchKlinesConcurrent(codes, concurrency) {
-  if (!concurrency) concurrency = 20
+  if (!concurrency) concurrency = 30
   var results = {}
   for (var g = 0; g < codes.length; g += concurrency) {
     var group = codes.slice(g, g + concurrency)
@@ -148,7 +198,7 @@ async function _fetchOneKline(code) {
   try {
     var text = await request(
       "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=" + prefix + code + ",day,,,60,qfq",
-      { timeout: 4000, headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/" } }
+      { timeout: 5000, headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/" } }
     )
     var data = JSON.parse(text)
     var stockData = data.data && data.data[prefix + code]
@@ -160,67 +210,7 @@ async function _fetchOneKline(code) {
   } catch(e) { return null }
 }
 
-// ===== 技术指标计算 =====
-function calcRSI(closes, period) {
-  if (!period) period = 14
-  if (!closes || closes.length <= period) return 50
-  var gains = 0, losses = 0
-  for (var i = closes.length - period; i < closes.length; i++) {
-    var diff = closes[i] - closes[i - 1]
-    if (diff >= 0) gains += diff; else losses -= diff
-  }
-  var avgGain = gains / period, avgLoss = losses / period
-  if (avgLoss === 0) return 100
-  var rs = avgGain / avgLoss
-  return Math.round(100 - 100 / (1 + rs))
-}
-
-function calcMA(closes, period) {
-  if (!closes || closes.length < period) return null
-  return Math.round(closes.slice(-period).reduce(function(a, b) { return a + b }, 0) / period * 100) / 100
-}
-
-function calcEMA(closes, period) {
-  if (!closes || closes.length < period) return null
-  var k = 2 / (period + 1)
-  var ema = closes.slice(0, period).reduce(function(a, b) { return a + b }, 0) / period
-  for (var i = period; i < closes.length; i++) ema = closes[i] * k + ema * (1 - k)
-  return Math.round(ema * 100) / 100
-}
-
-function calcBollPosition(closes, period) {
-  if (!period) period = 20
-  if (!closes || closes.length < period) return 0.5
-  var slice = closes.slice(-period)
-  var ma = slice.reduce(function(a, b) { return a + b }, 0) / period
-  var variance = 0
-  for (var i = 0; i < slice.length; i++) variance += (slice[i] - ma) * (slice[i] - ma)
-  variance /= period
-  var std = Math.sqrt(variance)
-  if (std === 0) return 0.5
-  return Math.round(Math.max(0, Math.min(1, (closes[closes.length - 1] - (ma - 2 * std)) / (4 * std))) * 100) / 100
-}
-
-function calcTechFromKlines(klines) {
-  if (!klines || klines.length < 15) return null
-  var closes = klines.map(function(k) { return k.close })
-  var rsi = calcRSI(closes, 14)
-  var ma5 = calcMA(closes, 5), ma10 = calcMA(closes, 10), ma20 = calcMA(closes, 20)
-  var maSignal = "neutral"
-  if (ma5 && ma10 && ma20) {
-    if (ma5 > ma10 && ma10 > ma20) maSignal = "bull"
-    else if (ma5 < ma10 && ma10 < ma20) maSignal = "bear"
-  }
-  var ema12 = calcEMA(closes, 12), ema26 = calcEMA(closes, 26)
-  var goldenCross = ema12 && ema26 && ema12 > ema26
-  var bollPosition = calcBollPosition(closes, 20)
-  var momentum5d = 0
-  if (closes.length >= 6) momentum5d = Math.round((closes[closes.length - 1] - closes[closes.length - 6]) / closes[closes.length - 6] * 10000) / 100
-  var macd = ema12 && ema26 ? Math.round((ema12 - ema26) * 1000) / 1000 : 0
-  return { rsi: rsi, maSignal: maSignal, goldenCross: goldenCross, bollPosition: bollPosition, momentum5d: momentum5d, macd: macd, ma5: ma5, ma10: ma10, ma20: ma20 }
-}
-
-// ===== 腾讯批量行情（补充PE/PB/量比/市值等）=====
+// ===== 腾讯批量行情 =====
 async function fetchTencentBatch(codes, batchSize) {
   if (!batchSize) batchSize = 80
   var results = {}
@@ -258,18 +248,419 @@ async function fetchTencentBatch(codes, batchSize) {
   return results
 }
 
-// ===== 东财板块分类（datacenter）=====
-async function fetchSectorMap() {
-  // 从东财获取每只股票的行业分类
-  return {}
+// ===== 技术指标计算 =====
+function calcRSI(closes, period) {
+  if (!period) period = 14
+  if (!closes || closes.length <= period) return 50
+  var gains = 0, losses = 0
+  for (var i = closes.length - period; i < closes.length; i++) {
+    var diff = closes[i] - closes[i - 1]
+    if (diff >= 0) gains += diff; else losses -= diff
+  }
+  var avgGain = gains / period, avgLoss = losses / period
+  if (avgLoss === 0) return 100
+  var rs = avgGain / avgLoss
+  return Math.round(100 - 100 / (1 + rs))
 }
 
-// ===== 行业推断（基于股票名称）=====
+function calcMA(closes, period) {
+  if (!closes || closes.length < period) return null
+  return Math.round(closes.slice(-period).reduce(function(a, b) { return a + b }, 0) / period * 100) / 100
+}
 
-// ===== 腾讯+Sina双降级行情（当东财不可用时使用）=====
+function calcEMA(closes, period) {
+  if (!closes || closes.length < period) return null
+  var k = 2 / (period + 1)
+  var ema = closes.slice(0, period).reduce(function(a, b) { return a + b }, 0) / period
+  for (var i = period; i < closes.length; i++) {
+    ema = closes[i] * k + ema * (1 - k)
+  }
+  return Math.round(ema * 100) / 100
+}
+
+function calcBollPosition(price, closes) {
+  if (!closes || closes.length < 20 || !price || price <= 0) return 0.5
+  var slice = closes.slice(-20)
+  var ma = slice.reduce(function(a, b) { return a + b }, 0) / slice.length
+  var variance = 0
+  for (var i = 0; i < slice.length; i++) variance += (slice[i] - ma) * (slice[i] - ma)
+  var std = Math.sqrt(variance / slice.length)
+  if (std === 0) return 0.5
+  var upper = ma + 2 * std
+  var lower = ma - 2 * std
+  return Math.round(Math.min(1, Math.max(0, (price - lower) / (upper - lower))) * 100) / 100
+}
+
+function calcTechFromKlines(klines) {
+  if (!klines || klines.length < 14) return null
+  var closes = klines.map(function(k) { return k.close })
+  var ma5 = calcMA(closes, 5)
+  var ma10 = calcMA(closes, 10)
+  var ma20 = calcMA(closes, 20)
+  var ma60 = calcMA(closes, Math.min(60, closes.length))
+  var price = closes[closes.length - 1]
+  var rsi = calcRSI(closes, 14)
+
+  // MACD
+  var ema12 = calcEMA(closes, 12)
+  var ema26 = calcEMA(closes, 26)
+  var dif = ema12 && ema26 ? ema12 - ema26 : 0
+  var prevEma12 = calcEMA(closes.slice(0, -1), 12)
+  var prevEma26 = calcEMA(closes.slice(0, -1), 26)
+  var prevDif = prevEma12 && prevEma26 ? prevEma12 - prevEma26 : 0
+  var goldenCross = dif > 0 && prevDif <= 0
+
+  // MA信号
+  var maSignal = "neutral"
+  if (ma5 && ma10 && ma20 && ma5 > ma10 && ma10 > ma20) maSignal = "bull"
+  else if (ma5 && ma10 && ma20 && ma5 < ma10 && ma10 < ma20) maSignal = "bear"
+
+  // 布林带位置
+  var bollPosition = calcBollPosition(price, closes)
+
+  // 5日动量
+  var momentum5d = 0
+  if (closes.length >= 6) momentum5d = (price / closes[closes.length - 6] - 1) * 100
+
+  return {
+    rsi: rsi, ma5: ma5, ma10: ma10, ma20: ma20, ma60: ma60,
+    dif: Math.round(dif * 100) / 100, goldenCross: goldenCross,
+    maSignal: maSignal, bollPosition: bollPosition, momentum5d: momentum5d,
+    macd: goldenCross ? 1 : (dif < prevDif ? -1 : 0),
+  }
+}
+
+// ===== 东财行业分类 =====
+async function fetchSectorMap() { return {} }
+
+// ===== 行业推断（基于股票名称+代码）=====
+var INDUSTRY_MAP = [
+  // === 申万二级行业精确匹配（API返回的BOARD_NAME）===
+  // 农林牧渔
+  ["种植业","农林牧渔-种植业"],["渔业","农林牧渔-渔业"],["林业","农林牧渔-林业"],
+  ["饲料","农林牧渔-饲料"],["农产品加工","农林牧渔-农产品加工"],["农业综合","农林牧渔-农业综合"],
+  ["动物保健","农林牧渔-动物保健"],
+  // 基础化工
+  ["农化制品","基础化工-农化制品"],["化学制品","基础化工-化学制品"],["化学原料","基础化工-化学原料"],
+  ["塑料","基础化工-塑料"],["橡胶","基础化工-橡胶"],["纤维","基础化工-纤维"],
+  ["聚氨酯","基础化工-聚氨酯"],["民爆制品","基础化工-民爆制品"],["涂料","基础化工-涂料"],
+  ["钛白粉","基础化工-钛白粉"],["氟化工","基础化工-氟化工"],["磷化工","基础化工-磷化工"],
+  ["纯碱","基础化工-纯碱"],["氯碱","基础化工-氯碱"],["有机硅","基础化工-有机硅"],
+  ["膜材料","基础化工-膜材料"],["碳纤维","基础化工-碳纤维"],["粘胶","基础化工-粘胶"],
+  // 钢铁
+  ["普钢","钢铁-普钢"],["特钢","钢铁-特钢"],["钢铁","钢铁-钢铁"],
+  // 有色金属
+  ["工业金属","有色金属-工业金属"],["贵金属","有色金属-贵金属"],
+  ["小金属","有色金属-小金属"],["金属新材料","有色金属-金属新材料"],
+  ["能源金属","有色金属-能源金属"],["铝","有色金属-铝"],["铜","有色金属-铜"],
+  ["黄金","有色金属-黄金"],["锂","有色金属-锂"],["稀土","有色金属-稀土"],
+  ["钴","有色金属-钴"],["镍","有色金属-镍"],["锡","有色金属-锡"],
+  // 电子
+  ["半导体","电子-半导体"],["消费电子","电子-消费电子"],["光学光电子","电子-光学光电子"],
+  ["元件","电子-元件"],["电子化学品","电子-电子化学品"],["印制电路板","电子-PCB"],
+  ["集成电路","电子-集成电路"],["分立器件","电子-分立器件"],["面板","电子-面板"],
+  ["LED","电子-LED"],["被动元件","电子-被动元件"],["连接器","电子-连接器"],
+  ["PCB","电子-PCB"],
+  // 家用电器
+  ["白色家电","家用电器-白电"],["黑色家电","家用电器-黑电"],["小家电","家用电器-小家电"],
+  ["厨卫电器","家用电器-厨卫电器"],["家电零部件","家用电器-零部件"],["照明设备","家用电器-照明"],
+  ["家电","家用电器-家电"],
+  // 食品饮料
+  ["白酒","食品饮料-白酒"],["啤酒","食品饮料-啤酒"],["乳品","食品饮料-乳品"],
+  ["调味发酵品","食品饮料-调味品"],["零食","食品饮料-零食"],["预加工食品","食品饮料-预制食品"],
+  ["软饮料","食品饮料-软饮料"],["保健品","食品饮料-保健品"],["烘焙食品","食品饮料-烘焙"],
+  ["肉制品","食品饮料-肉制品"],["其他食品","食品饮料-其他食品"],
+  ["食品","食品饮料-食品"],["饮料","食品饮料-饮料"],["调味品","食品饮料-调味品"],
+  // 纺织服饰
+  ["品牌服饰","纺织服饰-品牌服饰"],["纺织制造","纺织服饰-纺织制造"],
+  ["服装","纺织服饰-服装"],["纺织","纺织服饰-纺织"],["鞋帽","纺织服饰-鞋帽"],
+  // 轻工制造
+  ["家居","轻工制造-家居"],["造纸","轻工制造-造纸"],["包装印刷","轻工制造-包装印刷"],
+  ["文娱用品","轻工制造-文娱用品"],["家具","轻工制造-家具"],["包装","轻工制造-包装"],
+  // 医药生物
+  ["化学制药","医药生物-化学制药"],["中药","医药生物-中药"],["生物制品","医药生物-生物制品"],
+  ["医疗器械","医药生物-医疗器械"],["医药商业","医药生物-医药商业"],
+  ["医疗服务","医药生物-医疗服务"],["CXO","医药生物-CXO"],["疫苗","医药生物-疫苗"],
+  ["血液制品","医药生物-血液制品"],["体外诊断","医药生物-体外诊断"],
+  ["医疗耗材","医药生物-医疗耗材"],["制药","医药生物-制药"],["医药","医药生物-医药"],
+  // 公用事业
+  ["火力发电","公用事业-火电"],["水力发电","公用事业-水电"],["核力发电","公用事业-核电"],
+  ["风力发电","公用事业-风电"],["光伏发电","公用事业-光伏发电"],["热力服务","公用事业-热力"],
+  ["电能综合服务","公用事业-综合能源"],["燃气","公用事业-燃气"],
+  ["电力","公用事业-电力"],["水电","公用事业-水电"],["核电","公用事业-核电"],
+  // 交通运输
+  ["铁路公路","交通运输-铁路公路"],["物流","交通运输-物流"],["航运","交通运输-航运"],
+  ["港口","交通运输-港口"],["航空机场","交通运输-航空机场"],["公交","交通运输-公交"],
+  ["快递","交通运输-快递"],["航空","交通运输-航空"],
+  // 房地产
+  ["房地产开发","房地产-开发"],["房地产服务","房地产-服务"],["物业","房地产-物业"],
+  ["地产","房地产-房地产"],
+  // 银行
+  ["国有大行","银行-国有大行"],["股份行","银行-股份行"],["城商行","银行-城商行"],
+  ["农商行","银行-农商行"],["银行","银行-银行"],
+  // 非银金融
+  ["证券","非银金融-证券"],["保险","非银金融-保险"],["多元金融","非银金融-多元金融"],
+  ["券商","非银金融-券商"],["期货","非银金融-期货"],["信托","非银金融-信托"],
+  // 商贸零售
+  ["一般零售","商贸零售-零售"],["互联网电商","商贸零售-电商"],["专业连锁","商贸零售-连锁"],
+  ["贸易","商贸零售-贸易"],["旅游零售","商贸零售-旅游零售"],
+  ["电商","商贸零售-电商"],["零售","商贸零售-零售"],["百货","商贸零售-百货"],
+  // 社会服务
+  ["旅游及景区","社会服务-旅游"],["酒店餐饮","社会服务-酒店餐饮"],
+  ["教育","社会服务-教育"],["专业服务","社会服务-专业服务"],
+  ["人力资源","社会服务-人力资源"],["旅游","社会服务-旅游"],["酒店","社会服务-酒店"],
+  // 通信
+  ["通信设备","通信-通信设备"],["通信服务","通信-通信服务"],
+  ["电信运营","通信-电信运营"],["通信","通信-通信"],["5G","通信-5G"],
+  // 计算机
+  ["软件开发","计算机-软件"],["IT服务","计算机-IT服务"],["计算机设备","计算机-设备"],
+  ["云服务","计算机-云服务"],["信息安全","计算机-信息安全"],
+  ["软件","计算机-软件"],["信息","计算机-信息技术"],["科技","计算机-科技服务"],
+  ["AI","计算机-人工智能"],["人工智能","计算机-人工智能"],
+  // 传媒
+  ["游戏","传媒-游戏"],["影视院线","传媒-影视"],["数字媒体","传媒-数字媒体"],
+  ["营销代理","传媒-营销"],["出版","传媒-出版"],["电视广播","传媒-电视广播"],
+  ["传媒","传媒-传媒"],["影视","传媒-影视"],
+  // 国防军工
+  ["航空装备","国防军工-航空装备"],["航天装备","国防军工-航天装备"],
+  ["军工电子","国防军工-军工电子"],["地面兵装","国防军工-地面兵装"],
+  ["航海装备","国防军工-航海装备"],
+  ["军工","国防军工-军工"],["航天","国防军工-航天"],["船舶","国防军工-船舶"],
+  // 汽车
+  ["乘用车","汽车-乘用车"],["商用车","汽车-商用车"],["汽车零部件","汽车-零部件"],
+  ["摩托车","汽车-摩托车"],["汽车服务","汽车-服务"],
+  ["汽车","汽车-汽车"],["零部件","汽车-零部件"],["整车","汽车-整车"],
+  // 机械设备
+  ["通用设备","机械设备-通用设备"],["专用设备","机械设备-专用设备"],
+  ["轨交设备","机械设备-轨交设备"],["自动化设备","机械设备-自动化"],
+  ["工程机械","机械设备-工程机械"],["仪器仪表","机械设备-仪器仪表"],
+  ["机械","机械设备-通用设备"],["设备","机械设备-专用设备"],["仪表","仪器仪表-仪器仪表"],
+  // 电力设备
+  ["电池","电力设备-电池"],["光伏设备","电力设备-光伏"],["风电设备","电力设备-风电"],
+  ["电机","电力设备-电机"],["输变电设备","电力设备-输变电"],
+  ["锂电专用设备","电力设备-锂电设备"],
+  ["光伏","电力设备-光伏"],["储能","电力设备-储能"],["锂电","电力设备-锂电池"],
+  ["充电","电力设备-充电桩"],["风电","电力设备-风电"],["新能源","电力设备-新能源"],
+  // 建筑材料
+  ["水泥","建筑材料-水泥"],["玻璃","建筑材料-玻璃"],["装修建材","建筑材料-装修建材"],
+  ["建材","建筑材料-建材"],
+  // 建筑装饰
+  ["专业工程","建筑装饰-专业工程"],["房屋建设","建筑装饰-房屋建设"],
+  ["装修装饰","建筑装饰-装修装饰"],["建筑","建筑装饰-建筑"],["工程","建筑装饰-工程"],
+  // 环保
+  ["环境治理","环保-环境治理"],["环保设备","环保-环保设备"],
+  ["水务","环保-水务"],["环保","环保-环保"],
+  // 石油石化
+  ["油服工程","石油石化-油服工程"],["炼化化工","石油石化-炼化化工"],
+  ["石油加工","石油石化-石油加工"],["石油贸易","石油石化-石油贸易"],
+  ["石油","石油石化-石油"],["石化","石油石化-石化"],["天然气","石油石化-天然气"],
+  // 综合
+  ["综合","综合-综合"],
+  // === 名称关键词模糊匹配（兜底）===
+  ["化工","基础化工-化工"],["化肥","基础化工-化肥"],["农药","基础化工-农药"],
+  ["有色","有色金属-有色金属"],["养殖","农林牧渔-养殖"],["种业","农林牧渔-种业"],
+  ["农业","农林牧渔-农业"],["乳","食品饮料-乳业"],["调味","食品饮料-调味品"],
+  ["地产","房地产-房地产"],["核电","公用事业-核电"],["消费电子","电子-消费电子"],
+  ["电子","电子-电子元件"],
+  // === 名称关键词补充映射（兜底用）===
+  ["能源","公用事业-电力"],["能","公用事业-电力"],
+  ["热电","公用事业-火电"],
+  ["水电","公用事业-水电"],
+  ["核电","公用事业-核电"],
+  ["风电","公用事业-风电"],
+  ["光伏","电力设备-光伏"],
+  ["燃气","公用事业-燃气"],
+  ["煤","煤炭-煤炭"],
+  ["钢铁","钢铁-普钢"],
+  ["铝","有色金属-铝"],
+  ["铜","有色金属-铜"],
+  ["锂","有色金属-锂"],
+  ["银行","银行-银行"],
+  ["证券","非银金融-证券"],
+  ["保险","非银金融-保险"],
+  ["地产","房地产-开发"],
+  ["建设","建筑装饰-专业工程"],
+  ["建筑","建筑装饰-专业工程"],
+  ["物流","交通运输-物流"],
+  ["医药","医药生物-化学制药"],
+  ["药","医药生物-化学制药"],
+  ["医疗","医药生物-医疗器械"],
+  ["酒","食品饮料-白酒"],
+  ["食品","食品饮料-食品"],
+  ["乳","食品饮料-乳品"],
+  ["调味","食品饮料-调味品"],
+  ["肉","食品饮料-肉制品"],
+  ["养殖","农林牧渔-养殖业"],
+  ["牧","农林牧渔-养殖业"],
+  ["饲料","农林牧渔-饲料"],
+  ["化工","基础化工-化学制品"],
+  ["橡胶","基础化工-橡胶"],
+  ["纺织","纺织服饰-纺织制造"],
+  ["服装","纺织服饰-品牌服饰"],
+  ["纸","轻工制造-造纸"],
+  ["家居","轻工制造-家居"],
+  ["家具","轻工制造-家具"],
+  ["包装","轻工制造-包装"],
+  ["机械","机械设备-通用设备"],
+  ["设备","机械设备-通用设备"],
+  ["汽车","汽车-汽车"],
+  ["通信","通信-通信设备"],
+  ["传媒","传媒-传媒"],
+  ["游戏","传媒-游戏"],
+  ["教育","社会服务-教育"],
+  ["旅游","社会服务-旅游"],
+  ["酒店","社会服务-酒店"],
+  ["零售","商贸零售-零售"],
+  ["贸易","商贸零售-贸易"],
+  ["环保","环保-环保"],
+  ["水务","环保-水务"],
+  ["芯","电子-半导体"],
+  ["半导","电子-半导体"],
+  ["集成","电子-集成电路"],
+  ["软件","计算机-软件开发"],
+  ["信息","计算机-IT服务"],
+  ["科技","计算机-IT服务"],
+  ["数据","计算机-IT服务"],
+  ["智能","计算机-IT服务"]
+]
+
+// ===== 批量获取行业板块（东财datacenter API）=====
+async function fetchIndustryBatch(codes) {
+  if (!codes || codes.length === 0) return {}
+  var result = {}
+
+  // === 主源：东财datacenter 批量查询申万二级行业 ===
+  // 使用 IN 语法一次查询多只股票，大幅减少请求次数
+  var batchSize = 50  // 每批最多50只
+  for (var b = 0; b < codes.length; b += batchSize) {
+    var batchCodes = codes.slice(b, b + batchSize)
+    try {
+      var codeList = batchCodes.map(function(c) { return '"' + c + '"' }).join(',')
+      var url = "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD" +
+        "&columns=SECURITY_CODE,BOARD_NAME" +
+        "&filter=(SECURITY_CODE%20in%20(" + encodeURIComponent(codeList) + "))" +
+        "&pageSize=200&source=WEB&client=WEB"
+      var text = await request(url, {
+        timeout: 8000,
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://data.eastmoney.com/" }
+      })
+      var data = JSON.parse(text)
+      if (data.result && data.result.data && data.result.data.length > 0) {
+        // 去重：每只股票取第一条行业记录
+        var seen = {}
+        for (var i = 0; i < data.result.data.length; i++) {
+          var item = data.result.data[i]
+          var code = String(item.SECURITY_CODE || "")
+          var boardName = String(item.BOARD_NAME || "")
+          if (code && boardName && !seen[code] && boardName !== "综合") {
+            boardName = boardName.replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+$/g, "")
+            result[code] = boardName
+            seen[code] = true
+          }
+        }
+      }
+    } catch(e) {
+      console.warn("[行业API-批量] 第" + Math.floor(b / batchSize + 1) + "批失败:", e.message)
+    }
+  }
+  console.log("[行业API-批量] 成功 " + Object.keys(result).length + "/" + codes.length + " 只")
+
+  // === 备用源：对批量查询失败的股票，逐个查询 ===
+  var failed = codes.filter(function(c) { return !result[c] })
+  if (failed.length > 0) {
+    console.log("[行业API-逐个] 尝试 " + failed.length + " 只失败股票")
+    var concurrency = 5
+    var idx = 0
+    async function fetchOne(code) {
+      try {
+        var url = "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD" +
+          "&columns=SECURITY_CODE,BOARD_NAME&filter=(SECURITY_CODE=%22" + code + "%22)" +
+          "&pageSize=1&source=WEB&client=WEB"
+        var text = await request(url, {
+          timeout: 3000,
+          headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://data.eastmoney.com/" }
+        })
+        var data = JSON.parse(text)
+        if (data.result && data.result.data && data.result.data.length > 0) {
+          var boardName = String(data.result.data[0].BOARD_NAME || "")
+          if (boardName && boardName !== "综合") {
+            boardName = boardName.replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+$/g, "")
+            result[code] = boardName
+          }
+        }
+      } catch(e) { /* 静默失败 */ }
+    }
+    while (idx < failed.length) {
+      var batch = []
+      for (var j = 0; j < concurrency && idx < failed.length; j++) {
+        batch.push(fetchOne(failed[idx++]))
+      }
+      await Promise.all(batch)
+    }
+    console.log("[行业API-逐个] 补充后共 " + Object.keys(result).length + "/" + codes.length + " 只")
+  }
+
+  console.log("[行业API] 最终获取 " + Object.keys(result).length + "/" + codes.length + " 只行业")
+  return result
+}
+function guessIndustry(name, code, emIndustry, apiIndustry) {
+  // === 优先级1：API实时获取的行业（东财datacenter申万行业）===
+  if (apiIndustry && apiIndustry !== "" && apiIndustry !== "综合" && apiIndustry !== "-") {
+    // 先精确匹配apiIndustry本身
+    for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+      if (INDUSTRY_MAP[i][0] === apiIndustry) return INDUSTRY_MAP[i][1]
+    }
+    // 再模糊匹配（拼接name增加上下文）
+    var n1 = (name || "") + apiIndustry
+    for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+      if (n1.indexOf(INDUSTRY_MAP[i][0]) >= 0) return INDUSTRY_MAP[i][1]
+    }
+    // 没匹配到映射，直接返回API行业名
+    return apiIndustry
+  }
+
+  // === 优先级2：东财行情返回的行业（f100字段）===
+  if (emIndustry && emIndustry !== "" && emIndustry !== "综合" && emIndustry !== "-") {
+    // 已经是"大类-小类"格式直接返回
+    if (emIndustry.indexOf("-") >= 0) return emIndustry
+    // 先精确匹配
+    for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+      if (INDUSTRY_MAP[i][0] === emIndustry) return INDUSTRY_MAP[i][1]
+    }
+    // 再模糊匹配
+    var n2 = (name || "") + emIndustry
+    for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+      if (n2.indexOf(INDUSTRY_MAP[i][0]) >= 0) return INDUSTRY_MAP[i][1]
+    }
+    return emIndustry
+  }
+
+  // === 优先级3：根据名称关键词推断 ===
+  if (name) {
+    var n3 = String(name)
+    for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+      if (n3.indexOf(INDUSTRY_MAP[i][0]) >= 0) return INDUSTRY_MAP[i][1]
+    }
+  }
+
+  // === 优先级4：根据代码前缀推断 ===
+  if (code) {
+    var c = String(code)
+    if (c.startsWith("688")) return "电子-半导体"
+    if (c.startsWith("300")) return "计算机-科技服务"
+    if (c.startsWith("002")) return "基础化工-化学制品"
+    if (c.startsWith("000")) return "房地产-开发"
+    if (c.startsWith("601")) return "银行-国有大行"
+    if (c.startsWith("600")) return "银行-股份行"
+  }
+
+  return "其他"
+}
+// ===== 新浪降级行情 =====
+﻿
+// ===== 新浪全量股票（降级备用）=====
 async function fetchSinaAllStocks() {
   var allStocks = {}
-  // 使用新浪涨幅榜获取TOP股票（1-2页，前200只）
   var errors = 0
   for (var p = 2; p <= 5; p++) {
     try {
@@ -282,7 +673,6 @@ async function fetchSinaAllStocks() {
       if (!text || text === "null" || text === "" || text.indexOf("[") !== 0) break
       var items = JSON.parse(text)
       if (!items || items.length === 0) break
-      if (items.length > 0) { console.log("新浪样本: code=" + items[0].code + " name=" + items[0].name + " chg=" + items[0].changepercent + " trade=" + items[0].trade + " turn=" + items[0].turnratio + " vol=" + items[0].volume + " nmc=" + items[0].nmc + " price=" + items[0].trade); }
       for (var i = 0; i < items.length; i++) {
         var s = items[i]
         var code = String(s.code || "")
@@ -313,8 +703,7 @@ async function fetchSinaAllStocks() {
   console.log("新浪降级行情: " + Object.keys(allStocks).length + " 只")
   return allStocks
 }
-
-
+// ===== 沪深300大盘数据 =====
 async function fetchHS300() {
   try {
     var text = await request("https://hq.sinajs.cn/list=sh000300", {
@@ -338,86 +727,214 @@ async function fetchHS300() {
     return { status: st, changePct: cp, current: cur, prevClose: pc }
   } catch(e) { return null }
 }
-function guessIndustry(name, code) {
-  if (!name) return "综合"
-  var n = name
-  var pairs = [
-    ["半导体","电子-半导体"],["芯片","电子-半导体"],["集成电路","电子-半导体"],
-    ["医药","医药生物-医药"],["医疗","医药生物-医疗"],["生物","医药生物-生物医药"],
-    ["药","医药生物-医药"],["中药","医药生物-中药"],["化学制药","医药生物-化学制药"],
-    ["创新药","医药生物-创新药"],["医疗器械","医药生物-医疗器械"],["疫苗","医药生物-疫苗"],
-    ["电池","电力设备-电池"],["光伏","电力设备-光伏"],["锂电","电力设备-锂电池"],
-    ["新能源","电力设备-新能源"],["风电","电力设备-风电"],["储能","电力设备-储能"],
-    ["充电桩","电力设备-充电桩"],["固态电池","电力设备-固态电池"],
-    ["软件","计算机-软件"],["数据","计算机-数据"],["智能","计算机-人工智能"],
-    ["信息","计算机-信息技术"],["算力","计算机-算力"],["云计算","计算机-云计算"],
-    ["大数据","计算机-大数据"],["AI","计算机-人工智能"],["人工智能","计算机-人工智能"],
-    ["信创","计算机-信创"],["互联网","计算机-互联网"],["外包","计算机-IT服务"],
-    ["液冷","计算机-液冷"],
-    ["通信","通信-通信"],["5G","通信-5G"],["光模块","通信-光模块"],["光通信","通信-光通信"],
-    ["电子","电子-电子元器件"],["电路","电子-电路板"],["元器件","电子-元器件"],
-    ["消费电子","电子-消费电子"],["光学","电子-光学"],["PCB","电子-PCB"],
-    ["覆铜板","电子-覆铜板"],["连接器","电子-连接器"],["传感器","电子-传感器"],
-    ["半导体设备","电子-半导体设备"],["半导体材料","电子-半导体材料"],
-    ["汽车","汽车-汽车"],["零部","汽车-零部件"],["整车","汽车-整车"],
-    ["轮胎","汽车-轮胎"],["汽配","汽车-汽配"],["新能源车","汽车-新能源汽车"],
-    ["新能源汽车","汽车-新能源汽车"],
-    ["机械","机械设备-机械"],["装备","机械设备-装备"],["设备","机械设备-设备"],
-    ["机器人","机械设备-机器人"],["激光","机械设备-激光"],
-    ["工业母机","机械设备-工业母机"],["数控","机械设备-数控"],
-    ["工程机械","机械设备-工程机械"],["农机","机械设备-农机"],
-    ["减速器","机械设备-减速器"],["温控","机械设备-温控"],["3D打印","机械设备-3D打印"],
-    ["电气","电力设备-电气设备"],["电网","电力设备-电网"],
-    ["化工","基础化工-化工"],["化学","基础化工-化工"],["化纤","基础化工-化纤"],
-    ["农药","基础化工-农药"],["化肥","基础化工-化肥"],["橡胶","基础化工-橡胶"],
-    ["塑料","基础化工-塑料"],["碳纤维","基础化工-碳纤维"],["复合材料","基础化工-复合材料"],
-    ["有色","有色金属-有色金属"],["稀土","有色金属-稀土"],["黄金","有色金属-黄金"],
-    ["铜","有色金属-铜"],["铝","有色金属-铝"],["磁材","有色金属-磁性材料"],
-    ["永磁","有色金属-永磁"],
-    ["钢铁","钢铁-钢铁"],["煤炭","煤炭-煤炭"],["石油","石油石化-石油"],
-    ["建材","建筑材料-建材"],["水泥","建筑材料-水泥"],["玻璃","建筑材料-玻璃"],
-    ["银行","银行-银行"],["保险","非银金融-保险"],["证券","非银金融-证券"],
-    ["券商","非银金融-券商"],
-    ["地产","房地产-房地产"],["房","房地产-房地产"],["物业","房地产-物业"],
-    ["园区","房地产-园区"],
-    ["食品","食品饮料-食品"],["饮料","食品饮料-饮料"],["酒","食品饮料-酒"],
-    ["白酒","食品饮料-白酒"],["乳业","食品饮料-乳业"],["调味","食品饮料-调味品"],
-    ["预制菜","食品饮料-预制菜"],
-    ["家电","家用电器-家电"],
-    ["传媒","传媒-传媒"],["影视","传媒-影视"],["游戏","传媒-游戏"],["广告","传媒-广告"],
-    ["旅游","社会服务-旅游"],["酒店","社会服务-酒店"],["餐饮","社会服务-餐饮"],
-    ["教育","社会服务-教育"],["体育","社会服务-体育"],["检测","社会服务-检测"],
-    ["人力","社会服务-人力资源"],
-    ["军工","国防军工-军工"],["航天","国防军工-航天"],["船舶","国防军工-船舶"],
-    ["无人机","国防军工-无人机"],["低空","国防军工-低空经济"],
-    ["环保","环保-环保"],["水务","环保-水务"],["污水处理","环保-污水处理"],
-    ["固废","环保-固废"],["节能","环保-节能"],["水处理","环保-水处理"],
-    ["纺织","纺织服饰-纺织"],["服装","纺织服饰-服装"],["服饰","纺织服饰-服饰"],
-    ["珠宝","纺织服饰-珠宝"],
-    ["电商","商贸零售-电商"],["商贸","商贸零售-商贸"],["零售","商贸零售-零售"],
-    ["百货","商贸零售-百货"],["贸易","商贸零售-贸易"],["免税","商贸零售-免税"],
-    ["物流","交通运输-物流"],["快递","交通运输-快递"],["航空","交通运输-航空"],
-    ["高速","交通运输-高速公路"],["公路","交通运输-公路"],
-    ["航运","交通运输-航运"],["海运","交通运输-海运"],
-    ["养殖","农林牧渔-养殖"],["种业","农林牧渔-种业"],["农业","农林牧渔-农业"],
-    ["渔","农林牧渔-渔业"],["牧","农林牧渔-畜牧业"],["宠物","农林牧渔-宠物"],
-    ["家居","轻工制造-家居"],["造纸","轻工制造-造纸"],["包装","轻工制造-包装"],
-    ["印刷","轻工制造-印刷"],["木材","轻工制造-木材"],["文娱","轻工制造-文娱"],
-    ["玩具","轻工制造-玩具"],["家装","轻工制造-家装"],
-    ["建筑","建筑装饰-建筑"],["工程","建筑装饰-工程"],
-    ["电力","公用事业-电力"],["核电","公用事业-核电"],["水电","公用事业-水电"],
-    ["燃气","公用事业-燃气"],
-    ["医美","美容护理-医美"],["化妆品","美容护理-化妆品"],["日化","美容护理-日化"],
-  ]
-  for (var i = 0; i < pairs.length; i++) {
-    if (n.indexOf(pairs[i][0]) >= 0) return pairs[i][1]
-  }
-  return "综合"
+// ===== 多源自动切换：获取涨幅榜股票 =====
+// 源1: 东财push2 → 源2: 新浪涨幅榜+腾讯详情 → 源3: 腾讯热门批量
+// 任一源获取到数据就返回，自动降级
+
+async function fetchStockList(sortField, topN) {
+  if (!topN) topN = 200
+  console.log("[多源] 开始获取股票列表, sortField=" + sortField + ", topN=" + topN)
+  var stocks = {}
+
+  // === 源1: 东财push2 API ===
+  try {
+    console.log("[源1] 尝试东财push2...")
+    var emResult = await fetchEMByField(sortField, topN)
+    var emCount = Object.keys(emResult).length
+    console.log("[源1] 东财返回: " + emCount + " 只")
+    if (emCount >= 20) {
+      console.log("[源1] 东财数据充足，使用东财")
+      return emResult
+    }
+    if (emCount > 0) stocks = emResult
+  } catch(e) { console.warn("[源1] 东财失败:", e.message) }
+
+  // === 源2: 新浪涨幅榜 + 腾讯详情 ===
+  try {
+    console.log("[源2] 尝试新浪涨幅榜+腾讯详情...")
+    var sinaResult = await fetchSinaRankWithTencent(topN)
+    var sinaCount = Object.keys(sinaResult).length
+    console.log("[源2] 新浪+腾讯返回: " + sinaCount + " 只")
+    if (sinaCount >= 20) {
+      // 合并已有数据（东财可能有一些新浪没有的）
+      for (var k in sinaResult) { stocks[k] = sinaResult[k] }
+      console.log("[源2] 合并后: " + Object.keys(stocks).length + " 只")
+      return stocks
+    }
+    if (sinaCount > 0) {
+      for (var k in sinaResult) { stocks[k] = sinaResult[k] }
+    }
+  } catch(e) { console.warn("[源2] 新浪+腾讯失败:", e.message) }
+
+  // === 源3: 腾讯热门股票批量 ===
+  try {
+    console.log("[源3] 尝试腾讯热门批量...")
+    var txResult = await fetchTencentHotStocks(topN)
+    var txCount = Object.keys(txResult).length
+    console.log("[源3] 腾讯热门返回: " + txCount + " 只")
+    for (var k in txResult) { stocks[k] = txResult[k] }
+  } catch(e) { console.warn("[源3] 腾讯热门失败:", e.message) }
+
+  console.log("[多源] 最终合并: " + Object.keys(stocks).length + " 只")
+  return stocks
 }
 
+// ===== 新浪涨幅榜 + 腾讯详情补全 =====
+async function fetchSinaRankWithTencent(topN) {
+  var allStocks = {}
+  var pages = Math.ceil(topN / 80)
+  var allCodes = []
+
+  // 第1步：新浪获取涨幅榜代码列表
+  for (var p = 1; p <= pages; p++) {
+    try {
+      var url = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData" +
+        "?page=" + p + "&num=80&sort=changepercent&asc=0&node=hs_a&symbol=&_s_r_a=page"
+      var text = await request(url, {
+        timeout: 8000,
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/" }
+      })
+      if (!text || text === "null" || text === "" || text.indexOf("[") !== 0) continue
+      var items = JSON.parse(text)
+      if (!items || items.length === 0) continue
+      for (var i = 0; i < items.length; i++) {
+        var s = items[i]
+        var code = String(s.code || "")
+        if (!code || code.length !== 6) continue
+        var price = parseFloat(String(s.trade).replace(/,/g, "")) || 0
+        if (price <= 0) continue
+        // 过滤北交所
+        if (code.startsWith("920") || code.startsWith("8")) continue
+        allStocks[code] = {
+          code: code, name: String(s.name || ""),
+          price: price, changePct: parseFloat(s.changepercent) || 0,
+          amount: parseFloat(String(s.amount).replace(/,/g, "")) || 0,
+          turnover: parseFloat(s.turnratio) || 0,
+          pe: parseFloat(s.per) || 0, volumeRatio: 0,
+          circCap: (parseFloat(String(s.nmc).replace(/,/g, "")) || 0) / 10000,
+          pb: parseFloat(s.pb) || 0,
+        }
+        allCodes.push(code)
+      }
+    } catch(e) { console.warn("新浪第" + p + "页失败:", e.message) }
+  }
+  console.log("[新浪] 获取 " + allCodes.length + " 只代码")
+
+  // 第2步：腾讯批量补全量比/ROE/毛利率等
+  if (allCodes.length > 0) {
+    var tencentData = await fetchTencentBatch(allCodes, 80)
+    console.log("[腾讯补全] " + Object.keys(tencentData).length + " 只")
+    for (var code in allStocks) {
+      var td = tencentData[code]
+      if (td) {
+        if (td.volumeRatio && td.volumeRatio > 0) allStocks[code].volumeRatio = td.volumeRatio
+        if (td.roe) allStocks[code].roe = td.roe
+        if (td.grossMargin) allStocks[code].grossMargin = td.grossMargin
+        if (td.debtRatio) allStocks[code].debtRatio = td.debtRatio
+        if (td.pe && td.pe > 0) allStocks[code].pe = td.pe
+        if (td.pb && td.pb > 0) allStocks[code].pb = td.pb
+        if (td.circCap && td.circCap > 0) allStocks[code].circCap = td.circCap
+        if (td.turnover && td.turnover > 0) allStocks[code].turnover = td.turnover
+      }
+    }
+  }
+  return allStocks
+}
+
+// ===== 腾讯热门股票批量获取 ====
+// 使用沪深主要指数成分股+涨幅榜热门
+async function fetchTencentHotStocks(topN) {
+  var hotCodes = [
+    "600519","601318","600036","601398","600809","600900","601012","600276","600309","600585",
+    "600887","601166","601888","600048","601669","600031","601225","600346","600438","600570",
+    "000858","002594","000333","300750","002475","000001","002714","000568","002352","000725",
+    "002049","002415","000651","002230","002241","000002","002142","000063","002371","002607",
+    "300059","300015","300124","300014","300033","300024","300027","300017","300003","300009",
+    "600000","600009","600010","600011","600015","600016","600018","600019","600023","600025",
+    "600028","600029","600030","600032","600035","600037","600038","600039","600040","600046",
+    "000100","000402","000423","000425","000501","000503","000504","000505","000506","000507",
+    "300001","300002","300004","300005","300006","300007","300008","300010","300011","300012",
+    "601688","601857","601988","601989","601998","601939","601398","601288","601328","601390",
+    "000001","000002","000063","000066","000069","000100","000157","000333","000338","000338",
+    "002001","002007","002008","002024","002027","002032","002044","002049","002050","002056",
+    "600009","600016","600019","600025","600028","600029","600030","600031","600036","600048",
+    "300014","300015","300024","300033","300059","300122","300124","300136","300142","300146",
+    "601012","601088","601111","601138","601166","601225","601229","601236","601238","601288",
+    "600519","600521","600523","600525","600526","600527","600528","600529","600530","600531",
+    "000538","000539","000540","000541","000543","000544","000545","000546","000547","000548",
+    "002128","002129","002130","002131","002132","002133","002134","002135","002136","002137",
+    "300201","300207","300212","300214","300223","300226","300229","300232","300234","300238",
+    "601318","601328","601336","601348","601360","601369","601375","601377","601380","601388"
+  ]
+  // 去重
+  var uniqueCodes = []
+  var seen = {}
+  for (var i = 0; i < hotCodes.length; i++) {
+    if (!seen[hotCodes[i]] && hotCodes[i].length === 6) {
+      seen[hotCodes[i]] = true
+      uniqueCodes.push(hotCodes[i])
+    }
+  }
+  // 只取前topN个
+  var codes = uniqueCodes.slice(0, Math.min(topN, uniqueCodes.length))
+  console.log("[腾讯热门] 请求 " + codes.length + " 只")
+
+  var results = {}
+  var batchSize = 80
+  for (var b = 0; b < codes.length; b += batchSize) {
+    var batch = codes.slice(b, b + batchSize)
+    var txCodes = batch.map(function(c) { return (c.startsWith("6") || c.startsWith("9") ? "sh" : "sz") + c })
+    try {
+      var text = await request("https://qt.gtimg.cn/q=" + txCodes.join(","), {
+        timeout: 6000,
+        encoding: "gbk",
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/" }
+      })
+      var lines = text.split(";")
+      for (var li = 0; li < lines.length; li++) {
+        var match = lines[li].match(/v_\w+="([^"]+)"/)
+        if (!match) continue
+        var parts = match[1].split("~")
+        if (parts.length < 50) continue
+        var code = parts[2]
+        var price = parseFloat(parts[3]) || 0
+        if (price <= 0) continue
+        var changePct = parseFloat(parts[32]) || 0
+        var prevClose = parseFloat(parts[4]) || 0
+        results[code] = {
+          code: code,
+          name: String(parts[1] || ""),
+          price: price,
+          changePct: changePct,
+          turnover: parseFloat(parts[38]) || 0,
+          volumeRatio: parseFloat(parts[49]) || 0,
+          pe: parseFloat(parts[39]) || 0,
+          pb: parseFloat(parts[46]) || 0,
+          circCap: parseFloat(parts[44]) || 0,
+          roe: parseFloat(parts[65]) || 0,
+          grossMargin: parseFloat(parts[66]) || 0,
+          debtRatio: parseFloat(parts[67]) || 0,
+          high: parseFloat(parts[33]) || 0,
+          low: parseFloat(parts[34]) || 0,
+          open: prevClose > 0 ? prevClose + (price - prevClose) : price,
+          prevClose: prevClose,
+          amount: parseFloat(parts[37]) || 0,
+          industry: "",
+        }
+      }
+    } catch(e) { console.warn("腾讯热门第" + (b / batchSize + 1) + "批失败:", e.message) }
+  }
+  console.log("[腾讯热门] 解析 " + Object.keys(results).length + " 只")
+  return results
+}
 module.exports = {
+  fetchStockList: fetchStockList,
+  fetchSinaRankWithTencent: fetchSinaRankWithTencent,
+  fetchTencentHotStocks: fetchTencentHotStocks,
   request: request,
   fetchEMAllStocks: fetchEMAllStocks,
+  fetchEMTopStocks: fetchEMTopStocks,
+  fetchEMByField: fetchEMByField,
   fetchEMRank: fetchEMRank,
   fetchKlinesConcurrent: fetchKlinesConcurrent,
   fetchTencentBatch: fetchTencentBatch,
@@ -428,9 +945,9 @@ module.exports = {
   calcEMA: calcEMA,
   calcBollPosition: calcBollPosition,
   calcTechFromKlines: calcTechFromKlines,
-  guessIndustry: guessIndustry,
+  fetchIndustryBatch: fetchIndustryBatch,
+guessIndustry: guessIndustry,
   fetchHS300: fetchHS300,
   decodeName: decodeName,
+  parseEMStock: parseEMStock,
 }
-
-

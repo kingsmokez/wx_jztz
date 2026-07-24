@@ -1,107 +1,76 @@
 /**
- * 尾盘强势股选股 V6 - 对齐原版 wp2_picker.py
- * 信号: MA多头排列/放量突破/RSI强势/下影线支撑
+ * 尾盘强势股选股 V7 - 优化版，解决超时
+ * 优化：涨幅榜Top200+量比榜Top200合并，先粗评分取Top80再获取K线
  */
-const cloud = require("wx-server-sdk")
+var cloud = require("wx-server-sdk")
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
-const db = cloud.database()
-const _ = db.command
-const http = require("./http")
-const { evaluateStock, calculateBuySell, industryConcentrationLimit } = require("./evaluate")
+var db = cloud.database()
+var _ = db.command
+var http = require("./http")
+var _eval = require("./evaluate"); var evaluateStock = _eval.evaluateStock; var calculateBuySell = _eval.calculateBuySell; var industryConcentrationLimit = _eval.industryConcentrationLimit
 
-function todayStr() {
-  var d = new Date(Date.now() + 8 * 3600 * 1000)
-  return d.toISOString().slice(0, 10)
-}
+function todayStr() { var d = new Date(Date.now() + 8 * 3600 * 1000); return d.toISOString().slice(0, 10) }
 
-// ===== 尾盘选股评分（对齐原版 _wp2_calc_score）=====
 function calcWp2Score(stock, rsi, volumeRatio, bollPosition, goldenCross, maSignal, momentum5d) {
   var score = 0
   var chg = stock.changePct || 0
-
-  // 涨幅评分（尾盘偏好中等涨幅2-5%）
-  if (chg >= 2 && chg <= 5) score += 30
-  else if (chg > 5 && chg <= 7) score += 20
-  else if (chg >= 1 && chg < 2) score += 20
-  else if (chg >= 0 && chg < 1) score += 10
-  else if (chg > 7 && chg <= 9.5) score += 10
-  else if (chg < 0) score += Math.max(0, 3 + chg * 3)
-
-  // 量比评分
-  if (volumeRatio >= 1.5 && volumeRatio <= 3) score += 25
-  else if (volumeRatio > 3 && volumeRatio <= 5) score += 18
-  else if (volumeRatio >= 1 && volumeRatio < 1.5) score += 15
-  else if (volumeRatio > 5 && volumeRatio <= 8) score += 10
+  if (chg >= 2 && chg <= 5) score += 30; else if (chg > 5 && chg <= 7) score += 20
+  else if (chg >= 1 && chg < 2) score += 20; else if (chg >= 0 && chg < 1) score += 10
+  else if (chg > 7 && chg <= 9.5) score += 10; else if (chg < 0) score += Math.max(0, 3 + chg * 3)
+  if (volumeRatio >= 1.5 && volumeRatio <= 3) score += 25; else if (volumeRatio > 3 && volumeRatio <= 5) score += 18
+  else if (volumeRatio >= 1 && volumeRatio < 1.5) score += 15; else if (volumeRatio > 5 && volumeRatio <= 8) score += 10
   else if (volumeRatio < 1) score += 5
-
-  // 技术指标
   var techScore = 0
-  if (rsi >= 45 && rsi <= 60) techScore += 15
-  else if (rsi >= 60 && rsi <= 70) techScore += 12
-  else if (rsi >= 35 && rsi < 45) techScore += 8
-
+  if (rsi >= 45 && rsi <= 60) techScore += 15; else if (rsi >= 60 && rsi <= 70) techScore += 12; else if (rsi >= 35 && rsi < 45) techScore += 8
   if (goldenCross) techScore += 10
   if (maSignal === "bull") techScore += 12
-
-  if (bollPosition >= 0.6 && bollPosition <= 0.85) techScore += 8
-  else if (bollPosition > 0.85) techScore += 3
-  else if (bollPosition >= 0.45 && bollPosition < 0.6) techScore += 5
-
+  if (bollPosition >= 0.6 && bollPosition <= 0.85) techScore += 8; else if (bollPosition > 0.85) techScore += 3; else if (bollPosition >= 0.45 && bollPosition < 0.6) techScore += 5
   if (momentum5d >= 5) techScore += 3
   score += Math.min(35, techScore)
-
-  // 基本面加分
-  if (stock.pe > 0 && stock.pe <= 30) score += 5
-  else if (stock.pe > 30 && stock.pe <= 50) score += 2
+  if (stock.pe > 0 && stock.pe <= 30) score += 5; else if (stock.pe > 30 && stock.pe <= 50) score += 2
   if ((stock.roe || 0) >= 10) score += 5
   if ((stock.grossMargin || 0) >= 25) score += 3
   if ((stock.debtRatio || 0) > 0 && stock.debtRatio <= 50) score += 2
-
   return Math.round(score)
 }
 
-// ===== 尾盘信号生成（对齐原版 WP2 信号体系）=====
 function genWp2Signals(stock, rsi, goldenCross, maSignal, volumeRatio, bollPosition) {
   var signals = []
   var chg = stock.changePct || 0
-
-  // 涨幅信号
   if (chg >= 2 && chg <= 5) signals.push("强势上涨+" + Math.round(chg * 10) / 10 + "%")
   else if (chg > 5 && chg <= 7) signals.push("大涨+" + Math.round(chg * 10) / 10 + "%")
   else if (chg >= 1 && chg < 2) signals.push("稳步上扬+" + Math.round(chg * 10) / 10 + "%")
-
-  // MA信号
   if (maSignal === "bull") signals.push("MA多头排列")
-
-  // 量比信号
   if (volumeRatio >= 1.5 && volumeRatio <= 3) signals.push("量比" + Math.round(volumeRatio * 10) / 10 + "倍(适中)")
   else if (volumeRatio > 3 && volumeRatio <= 5) signals.push("量比" + Math.round(volumeRatio * 10) / 10 + "倍(放量)")
   else if (volumeRatio > 5) signals.push("巨量" + Math.round(volumeRatio * 10) / 10 + "倍")
-
-  // RSI信号
   if (rsi >= 45 && rsi <= 60) signals.push("RSI" + rsi + "(强势区)")
   else if (rsi >= 60 && rsi <= 70) signals.push("RSI" + rsi + "(超强区)")
-
-  // 金叉信号
   if (goldenCross) signals.push("MACD金叉")
-
-  // 布林带位置
   if (bollPosition >= 0.6 && bollPosition <= 0.85) signals.push("布林中轨上方")
   else if (bollPosition > 0.85) signals.push("布林上轨附近")
-
-  // 成交额信号
   var amtYi = (stock.amount || 0) / 100000000
   if (amtYi >= 3 && amtYi <= 20) signals.push("成交额" + Math.round(amtYi * 100) / 100 + "亿")
-
   return signals.length > 0 ? signals : ["关注"]
 }
 
-// ===== 主选股函数 =====
+function quickScore(stock) {
+  var score = 0
+  var chg = stock.changePct || 0
+  var vr = stock.volumeRatio || 0
+  var to = stock.turnover || 0
+  if (chg >= 2 && chg <= 7) score += 30; else if (chg >= 1 && chg < 2) score += 20; else if (chg >= 0 && chg < 1) score += 10
+  if (vr >= 1.5 && vr <= 5) score += 25; else if (vr >= 1 && vr < 1.5) score += 15; else if (vr > 5) score += 15
+  if (to >= 2 && to <= 8) score += 20; else if (to >= 1 && to < 2) score += 15
+  if (stock.pe > 0 && stock.pe <= 30) score += 10; else if (stock.pe > 30 && stock.pe <= 50) score += 5
+  if ((stock.circCap || 0) >= 30 && (stock.circCap || 0) <= 200) score += 15
+  return score
+}
+
 async function runWp2Picker(topN, force) {
   if (!topN) topN = 20
   var today = todayStr()
 
-  // 1. 检查缓存
   if (!force) {
     try {
       var cached = await db.collection("pick_cache").where({ type: "wp2", date: today }).orderBy("cachedAt", "desc").limit(1).get()
@@ -114,75 +83,81 @@ async function runWp2Picker(topN, force) {
   var marketEnv = { canPick: true, status: "震荡", changePct: 0 }
   try { var hs300 = await http.fetchHS300(); if (hs300) marketEnv = { canPick: true, status: hs300.status, changePct: hs300.changePct } } catch(e) {}
 
-  // 2. 东财全市场行情
-  console.log("获取全市场行情...")
+  console.log("获取候选股票...")
   var startTime = Date.now()
-  var allStocks = await http.fetchEMAllStocks()
-  var codes = Object.keys(allStocks)
-  console.log("东财行情: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
 
-  if (codes.length < 3000) {
-    console.log("东财数据不足,尝试新浪降级...")
-    startTime = Date.now()
-    allStocks = await http.fetchSinaAllStocks()
-    codes = Object.keys(allStocks)
-    console.log("新浪行情: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  // 优化：涨幅榜Top200 + 量比榜Top200合并，不再全量获取
+  var changeStocks = await http.fetchStockList("f3", 200)
+  var volumeRatioStocks = await http.fetchStockList("f10", 200)
+
+  var allStocks = {}
+  var codes1 = Object.keys(changeStocks)
+  var codes2 = Object.keys(volumeRatioStocks)
+  for (var i = 0; i < codes1.length; i++) allStocks[codes1[i]] = changeStocks[codes1[i]]
+  for (var i = 0; i < codes2.length; i++) {
+    if (!allStocks[codes2[i]]) allStocks[codes2[i]] = volumeRatioStocks[codes2[i]]
+    else {
+      var vs = volumeRatioStocks[codes2[i]]
+      if (vs.volumeRatio > 0) allStocks[codes2[i]].volumeRatio = vs.volumeRatio
+      if (vs.turnover > 0 && (!allStocks[codes2[i]].turnover || allStocks[codes2[i]].turnover === 0)) allStocks[codes2[i]].turnover = vs.turnover
+    }
   }
+  var codes = Object.keys(allStocks)
+  console.log("候选股票: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
 
-  if (codes.length < 50) return { stocks: [], marketEnv: marketEnv, cached: false }
-
-  // 3. 预筛选
   var candidates = []
   for (var i = 0; i < codes.length; i++) {
-    var s = allStocks[codes[i]]
-    if (!s.code || !s.name) continue
-    if (s.name.indexOf("ST") >= 0 || s.name.indexOf("*") >= 0 || s.name.indexOf("退") >= 0) continue
-    if (s.code.startsWith("8") || s.code.startsWith("4") || s.code.startsWith("920") || s.code.startsWith("900") || s.code.startsWith("200")) continue
-    if (s.price <= 3 || s.price > 500) continue
-    if (s.circCap > 0 && (s.circCap < 20 || s.circCap > 3000)) continue
-      if (s.changePct < -3) continue
-      var limitPct = (s.code && (s.code.startsWith("300") || s.code.startsWith("301") || s.code.startsWith("688"))) ? 19.5 : 9.5
-      if (s.changePct > limitPct) continue
-    candidates.push(s)
+    var stock = allStocks[codes[i]]
+    if (!stock || !stock.name || stock.name.indexOf("ST") >= 0 || stock.name.indexOf("退") >= 0) continue
+    if (stock.price <= 3 || stock.changePct <= 0) continue
+    if (stock.turnover < 1 && stock.volumeRatio < 1) continue
+    if (stock.circCap > 0 && stock.circCap < 20) continue
+    if (stock.code.startsWith("8") || stock.code.startsWith("4") || stock.code.startsWith("920")) continue
+    var qs = quickScore(stock)
+    if (qs >= 25) candidates.push({ stock: stock, quickScore: qs })
   }
-  console.log("预筛选: " + candidates.length + " 只")
+  candidates.sort(function(a, b) { return b.quickScore - a.quickScore })
+  candidates = candidates.slice(0, 80)
+  console.log("粗筛候选: " + candidates.length + " 只")
 
-  if (candidates.length === 0) return { stocks: [], marketEnv: marketEnv, cached: false }
-
-  // 4. 取候选股中top的K线计算技术指标
-  var topCandidates = candidates.slice(0, Math.min(candidates.length, 300))
-  var candidateCodes = topCandidates.map(function(c) { return c.code })
-  console.log("获取K线技术指标...")
-  var klinesMap = await http.fetchKlinesConcurrent(candidateCodes, 20)
-  // 补全财务数据（ROE/毛利率/负债率/换手率/量比）
-  console.log("获取腾讯行情补全财务数据...")
-  var tencentStartTime = Date.now()
-  var tencentData = {}
+  var klineCodes = candidates.map(function(c) { return c.stock.code })
+  var klinesMap = {}
+  startTime = Date.now()
   try {
-    tencentData = await http.fetchTencentBatch(candidateCodes, 80)
-    console.log("腾讯行情补全: " + Object.keys(tencentData).length + " 只, 耗时 " + (Date.now() - tencentStartTime) + "ms")
-    // 合并腾讯数据到候选股
-    for (var ti = 0; ti < topCandidates.length; ti++) {
-      var tc = topCandidates[ti]
-      var td = tencentData[tc.code]
-      if (td) {
-        if (td.roe) tc.roe = td.roe
-        if (td.grossMargin) tc.grossMargin = td.grossMargin
-        if (td.debtRatio) tc.debtRatio = td.debtRatio
-        if (td.turnover && td.turnover > 0) tc.turnover = td.turnover
-        if (td.volumeRatio && td.volumeRatio > 0) tc.volumeRatio = td.volumeRatio
-        if (td.pe && td.pe > 0) tc.pe = td.pe
-        if (td.pb && td.pb > 0) tc.pb = td.pb
-        if (td.circCap && td.circCap > 0) tc.circCap = td.circCap
-      }
-    }
-  } catch(e) { console.warn("腾讯行情补全失败:", e.message) }
+    klinesMap = await http.fetchKlinesConcurrent(klineCodes, 30)
+    console.log("K线获取: " + Object.keys(klinesMap).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  } catch(e) { console.warn("K线获取失败:", e.message) }
 
+  var tencentData = {}
+  startTime = Date.now()
+  try {
+    tencentData = await http.fetchTencentBatch(klineCodes, 80)
+    console.log("腾讯补全: " + Object.keys(tencentData).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  } catch(e) { console.warn("腾讯补全失败:", e.message) }
 
-  // 5. 计算技术指标 + 评分
+  // 批量获取行业板块
+  var industryMap = {}
+  startTime = Date.now()
+  try {
+    industryMap = await http.fetchIndustryBatch(klineCodes)
+    console.log("行业获取: " + Object.keys(industryMap).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  } catch(e) { console.warn("行业获取失败:", e.message) }
+
   var results = []
-  for (var i = 0; i < topCandidates.length; i++) {
-    var stock = topCandidates[i]
+  for (var i = 0; i < candidates.length; i++) {
+    var stock = candidates[i].stock
+    var td = tencentData[stock.code]
+    if (td) {
+      if (td.roe) stock.roe = td.roe
+      if (td.grossMargin) stock.grossMargin = td.grossMargin
+      if (td.debtRatio) stock.debtRatio = td.debtRatio
+      if (td.turnover && td.turnover > 0) stock.turnover = td.turnover
+      if (td.volumeRatio && td.volumeRatio > 0) stock.volumeRatio = td.volumeRatio
+      if (td.pe && td.pe > 0) stock.pe = td.pe
+      if (td.pb && td.pb > 0) stock.pb = td.pb
+      if (td.circCap && td.circCap > 0) stock.circCap = td.circCap
+    }
+
     var klines = klinesMap[stock.code]
     var tech = klines ? http.calcTechFromKlines(klines) : null
     var rsi = tech ? tech.rsi : 50
@@ -227,7 +202,7 @@ async function runWp2Picker(topN, force) {
       }, blendedScore, null)
     } catch(e) {}
 
-    var industry = http.guessIndustry(stock.name, stock.code)
+    var industry = http.guessIndustry(stock.name, stock.code, stock.industry, industryMap[stock.code])
 
     results.push({
       code: stock.code, name: stock.name,

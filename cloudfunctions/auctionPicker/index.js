@@ -143,17 +143,9 @@ async function runAuctionPicker(topN, force) {
   // 东财全市场行情
   console.log("竞价选股: 获取全市场行情...")
   var startTime = Date.now()
-  var allStocks = await http.fetchEMAllStocks()
+  var changeStocks = await http.fetchStockList("f3", 300); var turnoverStocks = await http.fetchStockList("f8", 200); var allStocks = {}; var codes1 = Object.keys(changeStocks); var codes2 = Object.keys(turnoverStocks); for (var i = 0; i < codes1.length; i++) allStocks[codes1[i]] = changeStocks[codes1[i]]; for (var i = 0; i < codes2.length; i++) { if (!allStocks[codes2[i]]) allStocks[codes2[i]] = turnoverStocks[codes2[i]] }
   var codes = Object.keys(allStocks)
   console.log("东财行情: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
-
-  if (codes.length < 3000) {
-    console.log("东财数据不足,尝试新浪降级...")
-    startTime = Date.now()
-    allStocks = await http.fetchSinaAllStocks()
-    codes = Object.keys(allStocks)
-    console.log("新浪行情: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
-  }
 
   if (codes.length < 50) return { stocks: [], marketEnv: marketEnv, cached: false }
 
@@ -200,7 +192,14 @@ async function runAuctionPicker(topN, force) {
     }
   } catch(e) { console.warn("腾讯行情补全失败:", e.message) }
 // 评分
-  var results = []
+    // 批量获取行业板块
+  var industryMap = {}
+  startTime = Date.now()
+  try {
+    industryMap = await http.fetchIndustryBatch(candidateCodes)
+    console.log("行业获取: " + Object.keys(industryMap).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  } catch(e) { console.warn("行业获取失败:", e.message) }
+var results = []
   for (var i = 0; i < candidates.length; i++) {
     var stock = candidates[i]
     var p1 = phase1Score(stock)
@@ -233,7 +232,7 @@ async function runAuctionPicker(topN, force) {
       }, finalScore, null)
     } catch(e) {}
 
-    var industry = http.guessIndustry(stock.name, stock.code)
+    var industry = http.guessIndustry(stock.name, stock.code, stock.industry, industryMap[stock.code])
 
     results.push({
       code: stock.code, name: stock.name,
