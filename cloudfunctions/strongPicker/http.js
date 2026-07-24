@@ -248,6 +248,336 @@ async function fetchTencentBatch(codes, batchSize) {
   return results
 }
 
+// ===== V31新增: ATR =====
+function calcATR(klines, period) {
+  if (!klines || klines.length < period + 1) return 0
+  var trs = []
+  for (var i = klines.length - period; i < klines.length; i++) {
+    var k = klines[i], prev = klines[i - 1]
+    var tr = Math.max(k.high - k.low, Math.abs(k.high - prev.close), Math.abs(k.low - prev.close))
+    trs.push(tr)
+  }
+  var sum = 0
+  for (var i = 0; i < trs.length; i++) sum += trs[i]
+  return sum / period
+}
+
+// ===== V31新增: ADX (平均趋向指数) =====
+function calcADX(klines, period) {
+  if (!klines || klines.length < period * 2 + 1) return { adx: 0, plusDI: 0, minusDI: 0 }
+  var plusDM = [], minusDM = [], trs = []
+  for (var i = 1; i < klines.length; i++) {
+    var cur = klines[i], prev = klines[i - 1]
+    var upMove = cur.high - prev.high
+    var downMove = prev.low - cur.low
+    var pdm = (upMove > downMove && upMove > 0) ? upMove : 0
+    var mdm = (downMove > upMove && downMove > 0) ? downMove : 0
+    var tr = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close))
+    plusDM.push(pdm); minusDM.push(mdm); trs.push(tr)
+  }
+  var smoothTR = trs.slice(-period).reduce(function(a, b) { return a + b }, 0)
+  var smoothPlusDM = plusDM.slice(-period).reduce(function(a, b) { return a + b }, 0)
+  var smoothMinusDM = minusDM.slice(-period).reduce(function(a, b) { return a + b }, 0)
+  if (smoothTR === 0) return { adx: 0, plusDI: 0, minusDI: 0 }
+  var plusDI = (smoothPlusDM / smoothTR) * 100
+  var minusDI = (smoothMinusDM / smoothTR) * 100
+  var dx = Math.abs(plusDI - minusDI) / (plusDI + minusDI || 1) * 100
+  return { adx: dx, plusDI: plusDI, minusDI: minusDI }
+}
+
+// ===== V31新增: OBV (能量潮) =====
+function calcOBV(klines) {
+  if (!klines || klines.length === 0) return { obv: 0, obvSlope5: 0, obvTrend: 0 }
+  var obv = 0
+  var obvArr = [0]
+  for (var i = 1; i < klines.length; i++) {
+    if (klines[i].close > klines[i - 1].close) obv += klines[i].volume
+    else if (klines[i].close < klines[i - 1].close) obv -= klines[i].volume
+    obvArr.push(obv)
+  }
+  var obvSlope5 = 0
+  if (obvArr.length >= 6) {
+    var recent5 = obvArr.slice(-5)
+    obvSlope5 = (recent5[4] - recent5[0]) / (recent5[0] || 1)
+  }
+  var obvTrend = 0
+  if (obvArr.length >= 21) {
+    var recent20 = obvArr.slice(-20)
+    var avgFirst5 = (recent20[0] + recent20[1] + recent20[2] + recent20[3] + recent20[4]) / 5
+    var avgLast5 = (recent20[15] + recent20[16] + recent20[17] + recent20[18] + recent20[19]) / 5
+    obvTrend = avgLast5 > avgFirst5 ? 1 : (avgLast5 < avgFirst5 ? -1 : 0)
+  }
+  return { obv: obv, obvSlope5: obvSlope5, obvTrend: obvTrend }
+}
+
+// ===== V31新增: 均线斜率 =====
+function calcMASlope(closes, period) {
+  if (!closes || closes.length < period + 2) return 0
+  var ma1 = calcMA(closes.slice(0, -1), period)
+  var ma2 = calcMA(closes.slice(0, -2), period)
+  if (ma2 === 0) return 0
+  return (ma1 - ma2) / ma2 * 100
+}
+
+// ===== V31新增: 形态识别 =====
+function detectCupHandle(klines) {
+  if (!klines || klines.length < 25) return 0
+  var recent = klines.slice(-25)
+  var highs = recent.map(function(k) { return k.high })
+  var maxHighIdx = 0
+  for (var i = 1; i < highs.length - 3; i++) { if (highs[i] > highs[maxHighIdx]) maxHighIdx = i }
+  var maxHigh = highs[maxHighIdx]
+  var price = recent[recent.length - 1].close
+  if (maxHighIdx < 3 || maxHighIdx > 22) return 0
+  var afterHigh = recent.slice(maxHighIdx)
+  var minLow = Infinity
+  for (var i = 0; i < afterHigh.length; i++) { if (afterHigh[i].low < minLow) minLow = afterHigh[i].low }
+  var pullback = (maxHigh - minLow) / maxHigh * 100
+  if (pullback < 5 || pullback > 20) return 0
+  var pullbackVols = afterHigh.slice(0, -1).map(function(k) { return k.volume })
+  var avgPullbackVol = pullbackVols.reduce(function(a, b) { return a + b }, 0) / pullbackVols.length
+  var beforeHighVols = recent.slice(0, maxHighIdx).map(function(k) { return k.volume })
+  var avgBeforeVol = beforeHighVols.reduce(function(a, b) { return a + b }, 0) / beforeHighVols.length
+  if (avgBeforeVol === 0) return 0
+  var volRatio = avgPullbackVol / avgBeforeVol
+  if (price >= maxHigh * 0.98 && volRatio < 1.0) return 5
+  if (price >= maxHigh * 0.98 && volRatio < 1.2) return 3
+  return 0
+}
+
+function detectBreakout(klines) {
+  if (!klines || klines.length < 15) return 0
+  var recent = klines.slice(-15)
+  var platform = recent.slice(-11, -1)
+  var maxHigh = -Infinity, minLow = Infinity
+  for (var i = 0; i < platform.length; i++) {
+    if (platform[i].high > maxHigh) maxHigh = platform[i].high
+    if (platform[i].low < minLow) minLow = platform[i].low
+  }
+  var platformRange = (maxHigh - minLow) / maxHigh * 100
+  if (platformRange > 4) return 0
+  var today = recent[recent.length - 1]
+  var avgVol = platform.reduce(function(a, b) { return a + b.volume }, 0) / platform.length
+  if (avgVol === 0) return 0
+  var todayVolRatio = today.volume / avgVol
+  if (today.close > maxHigh && todayVolRatio >= 1.5) return 5
+  if (today.close > maxHigh * 0.99 && todayVolRatio >= 1.3) return 3
+  return 0
+}
+
+function detectPullbackRestart(klines) {
+  if (!klines || klines.length < 10) return 0
+  var recent = klines.slice(-10)
+  var surgeIdx = -1
+  for (var i = 0; i < recent.length - 3; i++) {
+    var chg = (recent[i].close - recent[i].open) / recent[i].open * 100
+    if (chg >= 3 && i > 0 && recent[i].volume > recent[i - 1].volume * 1.5) { surgeIdx = i; break }
+  }
+  if (surgeIdx === -1) return 0
+  var pullback = recent.slice(surgeIdx + 1, -1)
+  if (pullback.length < 1 || pullback.length > 4) return 0
+  var avgPullbackVol = 0
+  for (var i = 0; i < pullback.length; i++) avgPullbackVol += pullback[i].volume
+  avgPullbackVol = avgPullbackVol / pullback.length
+  var surgeVol = recent[surgeIdx].volume
+  if (surgeVol === 0) return 0
+  if (avgPullbackVol / surgeVol > 0.8) return 0
+  var today = recent[recent.length - 1]
+  var todayChg = (today.close - today.open) / today.open * 100
+  if (todayChg >= 1 && today.volume > avgPullbackVol * 1.3) return 5
+  if (todayChg >= 0.5 && today.volume > avgPullbackVol * 1.2) return 3
+  return 0
+}
+
+function detectConsecutiveUp(klines) {
+  if (!klines || klines.length < 6) return 0
+  var recent = klines.slice(-5)
+  var upCount = 0, totalChg = 0
+  var vols = []
+  for (var i = 0; i < recent.length; i++) {
+    var chg = (recent[i].close - recent[i].open) / recent[i].open * 100
+    if (chg > 0) { upCount++; totalChg += chg }
+    vols.push(recent[i].volume)
+  }
+  if (upCount >= 3 && totalChg <= 12) {
+    var volIncreasing = vols[vols.length - 1] > vols[0] * 0.9
+    if (volIncreasing && upCount >= 4) return 5
+    if (volIncreasing) return 3
+  }
+  return 0
+}
+
+function detectBottomReversal(klines) {
+  if (!klines || klines.length < 25) return 0
+  var recent = klines.slice(-25)
+  var today = recent[recent.length - 1]
+  var minClose = Infinity, minIdx = 0
+  for (var i = 0; i < recent.length - 1; i++) {
+    if (recent[i].close < minClose) { minClose = recent[i].close; minIdx = i }
+  }
+  if (minIdx < recent.length - 20 || minIdx > recent.length - 5) return 0
+  var firstClose = recent[0].close
+  var dropFrom20 = (firstClose - minClose) / firstClose * 100
+  if (dropFrom20 < 8) return 0
+  var todayChg = (today.close - today.open) / today.open * 100
+  if (todayChg < 3) return 0
+  var avgVol = recent.slice(0, -1).reduce(function(a, b) { return a + b.volume }, 0) / (recent.length - 1)
+  if (avgVol === 0) return 0
+  var volRatio = today.volume / avgVol
+  if (volRatio >= 2) return 5
+  if (volRatio >= 1.5) return 3
+  return 0
+}
+
+function detectMASupport(klines) {
+  if (!klines || klines.length < 60) return 0
+  var closes = klines.map(function(k) { return k.close })
+  var ma5 = calcMA(closes, 5), ma10 = calcMA(closes, 10), ma20 = calcMA(closes, 20)
+  var price = closes[closes.length - 1]
+  if (!(ma5 > ma10 && ma10 > ma20)) return 0
+  var ratio = price / ma10
+  if (ratio >= 0.97 && ratio <= 1.03) {
+    var today = klines[klines.length - 1]
+    if (today.close > today.open) return 5
+    return 3
+  }
+  ratio = price / ma20
+  if (ratio >= 0.97 && ratio <= 1.03) {
+    var today = klines[klines.length - 1]
+    if (today.close > today.open) return 3
+  }
+  return 0
+}
+
+function detectPatterns(klines) {
+  return {
+    cupHandle: detectCupHandle(klines),
+    breakout: detectBreakout(klines),
+    pullbackRestart: detectPullbackRestart(klines),
+    consecutiveUp: detectConsecutiveUp(klines),
+    bottomReversal: detectBottomReversal(klines),
+    maSupport: detectMASupport(klines),
+  }
+}
+
+// ===== V31: 量价配合度 (0-100) =====
+function calcVolumePriceCoord(klines) {
+  if (!klines || klines.length < 10) return { score: 50, trend: "neutral" }
+  var recent = klines.slice(-10)
+  var upWithVol = 0, upNoVol = 0, downWithVol = 0, downNoVol = 0
+  for (var i = 1; i < recent.length; i++) {
+    var priceUp = recent[i].close > recent[i - 1].close
+    var volUp = recent[i].volume > recent[i - 1].volume
+    if (priceUp && volUp) upWithVol++
+    else if (priceUp && !volUp) upNoVol++
+    else if (!priceUp && volUp) downWithVol++
+    else downNoVol++
+  }
+  var total = recent.length - 1
+  var coordRatio = upWithVol / total
+  var divergeRatio = upNoVol / total
+  var score = 50
+  if (coordRatio >= 0.5) score = 80 + (coordRatio - 0.5) * 40
+  else if (coordRatio >= 0.3) score = 60 + (coordRatio - 0.3) * 100
+  else if (divergeRatio >= 0.5) score = 20
+  else score = 40
+  var trend = "neutral"
+  if (coordRatio >= 0.4) trend = "bullish"
+  else if (divergeRatio >= 0.4) trend = "bearish_divergence"
+  return { score: Math.min(100, Math.max(0, Math.round(score))), trend: trend, upWithVol: upWithVol, upNoVol: upNoVol }
+}
+
+// ===== V31: 趋势加速 =====
+function calcTrendAcceleration(closes) {
+  if (!closes || closes.length < 20) return { accelerating: false, score: 0, accelRatio: 0 }
+  var recentSlope = calcMASlope(closes, 5)
+  var prevCloses = closes.slice(0, -3)
+  var prevSlope = calcMASlope(prevCloses, 5)
+  if (prevSlope === 0 && recentSlope === 0) return { accelerating: false, score: 0, accelRatio: 0 }
+  var accelRatio = (recentSlope - prevSlope) / (Math.abs(prevSlope) || 0.001)
+  var accelerating = false
+  var score = 0
+  if (recentSlope > 0 && accelRatio > 0.5) {
+    accelerating = true
+    if (accelRatio > 2) score = 100
+    else if (accelRatio > 1) score = 80
+    else score = 60
+  } else if (recentSlope > 0 && accelRatio > 0) {
+    score = 30
+  }
+  return { accelerating: accelerating, score: score, accelRatio: accelRatio, recentSlope: recentSlope, prevSlope: prevSlope }
+}
+
+// ===== V31: 缩量整理突破 =====
+function detectConsolidationBreakout(klines) {
+  if (!klines || klines.length < 25) return { detected: false, score: 0 }
+  var recent = klines.slice(-25)
+  var today = recent[recent.length - 1]
+  var todayChg = (today.close - today.open) / today.open * 100
+  var bestScore = 0
+  for (var start = recent.length - 16; start <= recent.length - 6; start++) {
+    if (start < 0) continue
+    var range = recent.slice(start, -1)
+    if (range.length < 5) continue
+    var smallChgCount = 0
+    var volDeclining = true
+    var rangeHigh = -Infinity, rangeLow = Infinity
+    for (var i = 0; i < range.length; i++) {
+      var chg = Math.abs((range[i].close - range[i].open) / range[i].open * 100)
+      if (chg <= 2.5) smallChgCount++
+      rangeHigh = Math.max(rangeHigh, range[i].high)
+      rangeLow = Math.min(rangeLow, range[i].low)
+      if (i > 0 && range[i].volume > range[i - 1].volume * 1.1) volDeclining = false
+    }
+    var rangeAmplitude = (rangeHigh - rangeLow) / rangeLow * 100
+    if (rangeAmplitude > 15) continue
+    if (smallChgCount / range.length < 0.6) continue
+    var breakout = today.close > rangeHigh && todayChg >= 1.5
+    var avgVol = 0
+    for (var i = 0; i < range.length; i++) avgVol += range[i].volume
+    avgVol /= range.length
+    var volRatio = avgVol > 0 ? today.volume / avgVol : 0
+    var score = 0
+    if (breakout && volRatio >= 1.5) score = 100
+    else if (breakout && volRatio >= 1.2) score = 70
+    else if (today.close > rangeHigh * 0.98 && todayChg >= 1 && volRatio >= 1.3) score = 50
+    if (volDeclining && score > 0) score = Math.min(100, score + 10)
+    if (score > bestScore) bestScore = score
+  }
+  return { detected: bestScore >= 50, score: bestScore }
+}
+
+// ===== V31: K线形态组合 =====
+function calcCandlePatterns(klines) {
+  if (!klines || klines.length < 5) return { score: 0, patterns: [] }
+  var recent = klines.slice(-5)
+  var today = recent[recent.length - 1]
+  var score = 0
+  var detected = []
+  var todayBody = Math.abs(today.close - today.open)
+  var todayRange = today.high - today.low
+  if (today.close > today.open && todayRange > 0 && todayBody / todayRange > 0.7) {
+    var avgVol = 0
+    for (var i = 0; i < recent.length - 1; i++) avgVol += recent[i].volume
+    avgVol /= (recent.length - 1)
+    if (avgVol > 0 && today.volume / avgVol >= 1.5) { score += 12; detected.push("big_yang") }
+  }
+  if (recent.length >= 3) {
+    var threeUp = true
+    for (var i = recent.length - 3; i < recent.length; i++) {
+      if (recent[i].close <= recent[i].open) { threeUp = false; break }
+    }
+    if (threeUp) { score += 8; detected.push("three_white") }
+  }
+  var lowerShadow = Math.min(today.open, today.close) - today.low
+  if (todayRange > 0 && lowerShadow / todayRange > 0.4) { score += 5; detected.push("long_lower_shadow") }
+  if (recent.length >= 2) {
+    var gap = today.open - recent[recent.length - 2].close
+    if (gap > 0 && today.close > today.open) { score += 6; detected.push("gap_up") }
+  }
+  return { score: Math.min(30, score), patterns: detected }
+}
+
 // ===== 技术指标计算 =====
 function calcRSI(closes, period) {
   if (!period) period = 14
@@ -309,6 +639,7 @@ function calcTechFromKlines(klines) {
   var prevEma26 = calcEMA(closes.slice(0, -1), 26)
   var prevDif = prevEma12 && prevEma26 ? prevEma12 - prevEma26 : 0
   var goldenCross = dif > 0 && prevDif <= 0
+  var macdObj = { dif: dif, dea: ema26, macd: 2 * (dif - ema26), golden: goldenCross }
 
   // MA信号
   var maSignal = "neutral"
@@ -322,11 +653,29 @@ function calcTechFromKlines(klines) {
   var momentum5d = 0
   if (closes.length >= 6) momentum5d = (price / closes[closes.length - 6] - 1) * 100
 
+  // V31新增: ADX/OBV/形态/量价配合度/趋势加速/缩量突破/K线形态
+  var adxObj = klines.length >= 30 ? calcADX(klines, 14) : { adx: 0, plusDI: 0, minusDI: 0 }
+  var obvObj = klines.length >= 21 ? calcOBV(klines) : { obv: 0, obvSlope5: 0, obvTrend: 0 }
+  var ma5Slope = calcMASlope(closes, 5)
+  var patterns = klines.length >= 25 ? detectPatterns(klines) : null
+  var vpCoord = klines.length >= 10 ? calcVolumePriceCoord(klines) : { score: 50, trend: "neutral" }
+  var trendAccel = closes.length >= 20 ? calcTrendAcceleration(closes) : { accelerating: false, score: 0, accelRatio: 0 }
+  var consolidationBreakout = klines.length >= 25 ? detectConsolidationBreakout(klines) : { detected: false, score: 0 }
+  var candlePatterns = klines.length >= 5 ? calcCandlePatterns(klines) : { score: 0, patterns: [] }
+
+  // 20日动量
+  var momentum20 = closes.length >= 21 ? (price / closes[closes.length - 21] - 1) * 100 : 0
+
   return {
     rsi: rsi, ma5: ma5, ma10: ma10, ma20: ma20, ma60: ma60,
-    dif: Math.round(dif * 100) / 100, goldenCross: goldenCross,
-    maSignal: maSignal, bollPosition: bollPosition, momentum5d: momentum5d,
+    dif: Math.round(dif * 100) / 100, goldenCross: goldenCross, macdObj: macdObj,
+    maSignal: maSignal, bollPosition: bollPosition, momentum5d: momentum5d, momentum20: momentum20,
     macd: goldenCross ? 1 : (dif < prevDif ? -1 : 0),
+    adx: adxObj.adx, plusDI: adxObj.plusDI, minusDI: adxObj.minusDI,
+    obvTrend: obvObj.obvTrend, obvSlope5: obvObj.obvSlope5,
+    ma5Slope: ma5Slope, patterns: patterns,
+    vpCoord: vpCoord, trendAccel: trendAccel,
+    consolidationBreakout: consolidationBreakout, candlePatterns: candlePatterns,
   }
 }
 
@@ -945,6 +1294,15 @@ module.exports = {
   calcEMA: calcEMA,
   calcBollPosition: calcBollPosition,
   calcTechFromKlines: calcTechFromKlines,
+  calcADX: calcADX,
+  calcOBV: calcOBV,
+  calcMASlope: calcMASlope,
+  calcATR: calcATR,
+  detectPatterns: detectPatterns,
+  calcVolumePriceCoord: calcVolumePriceCoord,
+  calcTrendAcceleration: calcTrendAcceleration,
+  detectConsolidationBreakout: detectConsolidationBreakout,
+  calcCandlePatterns: calcCandlePatterns,
   fetchIndustryBatch: fetchIndustryBatch,
 guessIndustry: guessIndustry,
   fetchHS300: fetchHS300,

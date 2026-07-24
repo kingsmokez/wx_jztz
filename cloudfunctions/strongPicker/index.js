@@ -1,7 +1,8 @@
 /**
- * 短线强势股选股 V30 - 基于回测最优策略V28b4
- * 核心: V10评分x0.35 + 温和因子x0.65 加权排名
- * 回测2年数据全面超越V10基准(5dWR+1.14%, 5dAR+0.10%, 10dWR+1.34%, 10dAR+0.09%)
+ * 短线强势股选股 V32b - 基于回测最优策略V32b_75_25
+ * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
+ * V31五维度: 资金活跃度(30)+趋势确认(25)+量价配合(20)+形态信号(15)+位置安全(10)
+ * 回测2年数据全面超越V10基准(5dWR+2.11%, 10dWR+1.90%, 10dAR+0.25%)
  * 优化：涨幅榜Top300+换手率榜Top300合并，先粗评分取Top80再获取K线
  */
 var cloud = require("wx-server-sdk")
@@ -96,6 +97,122 @@ function calcMildScore(stock, volumeRatio, rsi) {
   else mildScore += 8
   return mildScore
 }
+
+/**
+ * V31五维度评分 (回测V32b最优策略核心)
+ * 5维度: 资金活跃度(30) + 趋势确认度(25) + 量价配合度(20) + 形态信号(15) + 位置安全度(10)
+ * 回测2年: 5dWR+2.11%, 10dWR+1.90%, 10dAR+0.25% 全面超越V10基准
+ */
+function calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, code, change5d, techData) {
+  var score = 0
+  var chg = stock.changePct || 0
+  var isGem = code.startsWith("300") || code.startsWith("301") || code.startsWith("688")
+  var maSignal = techData ? (techData.maSignal || "neutral") : "neutral"
+  var macdObj = techData ? (techData.macdObj || {}) : {}
+  var price = stock.price || 0
+  var turnover = stock.turnover || 0
+  var amount = stock.amount || 0
+
+  // ====== 1. 资金活跃度 (0-30) ======
+  var capitalScore = 0
+  if (volumeRatio >= 1.5 && volumeRatio <= 2.5) capitalScore += 15
+  else if (volumeRatio >= 1.0 && volumeRatio < 1.5) capitalScore += 10
+  else if (volumeRatio > 2.5 && volumeRatio <= 4) capitalScore += 8
+  else if (volumeRatio > 4 && volumeRatio <= 6) capitalScore += 4
+  else if (volumeRatio > 6) capitalScore += 1
+  if (turnover >= 3 && turnover <= 8) capitalScore += 10
+  else if (turnover >= 1.5 && turnover < 3) capitalScore += 6
+  else if (turnover > 8 && turnover <= 15) capitalScore += 5
+  else if (turnover >= 0.5 && turnover < 1.5) capitalScore += 3
+  else if (turnover > 15) capitalScore += 1
+  if (amount >= 500000000) capitalScore += 5
+  else if (amount >= 200000000) capitalScore += 4
+  else if (amount >= 100000000) capitalScore += 3
+  else if (amount >= 50000000) capitalScore += 2
+  score += Math.min(30, capitalScore)
+
+  // ====== 2. 趋势确认度 (0-25) ======
+  var trendScore = 0
+  if (maSignal === "bull") trendScore += 8
+  else if (techData && techData.ma5 > 0 && techData.ma10 > 0) {
+    if (price > techData.ma5 && price > techData.ma10) trendScore += 4
+    else if (price > techData.ma5 || price > techData.ma10) trendScore += 2
+  }
+  if (goldenCross) trendScore += 7
+  else if (macdObj.dif > 0 && macdObj.dea > 0 && macdObj.macd > 0) trendScore += 4
+  else if (macdObj.dif > 0 && macdObj.dea > 0) trendScore += 2
+  if (techData && techData.adx !== undefined) {
+    if (techData.adx >= 25 && techData.plusDI > techData.minusDI) trendScore += 5
+    else if (techData.adx >= 20 && techData.plusDI > techData.minusDI) trendScore += 3
+  }
+  if (change5d >= 5 && change5d <= 15) trendScore += 5
+  else if (change5d >= 3 && change5d < 5) trendScore += 3
+  else if (change5d >= 1 && change5d < 3) trendScore += 1
+  score += Math.min(25, trendScore)
+
+  // ====== 3. 量价配合度 (0-20) ======
+  var vpScore = 0
+  if (techData && techData.vpCoord) {
+    var vp = techData.vpCoord
+    if (vp.trend === "bullish") vpScore += 12
+    else if (vp.trend === "neutral") vpScore += 6
+    else if (vp.trend === "bearish_divergence") vpScore += 1
+    if (vp.score >= 70) vpScore += 8
+    else if (vp.score >= 50) vpScore += 4
+  } else {
+    if (techData && techData.obvTrend === 1) vpScore += 10
+    else if (techData && techData.obvSlope5 > 0) vpScore += 6
+  }
+  score += Math.min(20, vpScore)
+
+  // ====== 4. 形态信号 (0-15) ======
+  var patternScore = 0
+  if (techData) {
+    if (techData.consolidationBreakout) {
+      if (techData.consolidationBreakout.score >= 70) patternScore += 6
+      else if (techData.consolidationBreakout.score >= 50) patternScore += 4
+    }
+    if (techData.trendAccel) {
+      if (techData.trendAccel.accelerating) patternScore += 4
+      else if (techData.trendAccel.score >= 30) patternScore += 2
+    }
+    if (techData.candlePatterns) {
+      patternScore += Math.min(5, Math.floor(techData.candlePatterns.score / 6))
+    }
+    if (techData.patterns) {
+      if (techData.patterns.breakout >= 4) patternScore += 2
+      else if (techData.patterns.maSupport >= 3) patternScore += 2
+    }
+  }
+  score += Math.min(15, patternScore)
+
+  // ====== 5. 位置安全度 (0-10) ======
+  var safetyScore = 0
+  if (isGem) {
+    if (chg >= 1.5 && chg <= 5) safetyScore += 4
+    else if (chg >= 1 && chg < 1.5) safetyScore += 3
+    else if (chg > 5 && chg <= 8) safetyScore += 2
+    else if (chg > 8) safetyScore += 0
+    else if (chg >= 0 && chg < 1) safetyScore += 1
+  } else {
+    if (chg >= 1.5 && chg <= 4) safetyScore += 4
+    else if (chg >= 1 && chg < 1.5) safetyScore += 3
+    else if (chg > 4 && chg <= 6) safetyScore += 2
+    else if (chg > 6) safetyScore += 0
+    else if (chg >= 0 && chg < 1) safetyScore += 1
+  }
+  if (rsi >= 45 && rsi <= 65) safetyScore += 3
+  else if (rsi >= 35 && rsi < 45) safetyScore += 2
+  else if (rsi > 65 && rsi <= 75) safetyScore += 1
+  if (bollPosition >= 0.3 && bollPosition < 0.7) safetyScore += 3
+  else if (bollPosition >= 0.5 && bollPosition < 0.8) safetyScore += 2
+  else if (bollPosition >= 0.1 && bollPosition < 0.3) safetyScore += 1
+  score += Math.min(10, safetyScore)
+
+  return Math.round(Math.min(100, Math.max(0, score)))
+}
+
+
 function genReasons(stock, v5Reasons, goldenCross, volumeRatio, rsi, pullbackStable, pe, roe) {
   var parts = []
   if (v5Reasons) parts.push(v5Reasons)
@@ -272,7 +389,24 @@ async function runStrongPicker(topN, force) {
 
     // V28b4最优策略: 温和因子加权排名
     var mildScore = calcMildScore(stock, volumeRatio, rsi)
-    var rankingScore = Math.round(blendedScore * 0.35 + mildScore * 0.65)
+// V32b: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
+    var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
+    var v10Score = blendedScore
+    var rankingScore = v31Score * 0.75 + v10Score * 0.25
+    // ADX过滤: ADX>=20且+DI>-DI
+    var adxFiltered = false
+    if (tech && tech.adx !== undefined && (tech.adx < 20 || tech.plusDI <= tech.minusDI)) adxFiltered = true
+    // 量价背离过滤
+    var vpFiltered = false
+    if (tech && tech.vpCoord && tech.vpCoord.trend === "bearish_divergence") vpFiltered = true
+    // BOLL位置过滤: bollPosition>0.85
+    var bollFiltered = false
+    if (bollPosition > 0.85) bollFiltered = true
+    // 过滤标记(不直接排除，降低评分)
+    if (adxFiltered) rankingScore *= 0.7
+    if (vpFiltered) rankingScore *= 0.6
+    if (bollFiltered) rankingScore *= 0.8
+    rankingScore = Math.round(rankingScore)
 
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
@@ -310,6 +444,7 @@ async function runStrongPicker(topN, force) {
       score: blendedScore,
       totalScore: blendedScore,
       mildScore: mildScore,
+      v31Score: v31Score || 0,
       rankingScore: rankingScore,
       techScore: Math.round(techScore),
       v5Score: Math.round(v5Score * 10) / 10,
