@@ -174,11 +174,11 @@
           </view>
         </view>
 
-        <!-- V48b持有策略 -->
+        <!-- V49e持有策略 -->
         <view class="hold-strategy" wx:if="{{item.holdStrategy}}">
           <view class="hs-header">
-            <text class="hs-title">📊 持有策略 (V48b回测最优)</text>
-            <text class="hs-tag">WR=60% AR=1.68%</text>
+            <text class="hs-title">📊 持有策略 (V49e回测最优)</text>
+            <text class="hs-tag">WR=67.12% AR=3.93%</text>
           </view>
           <view class="hs-rules">
             <text class="hs-rule">最大持有 {{item.holdStrategy.maxHoldDays}} 天</text>

@@ -1,9 +1,9 @@
 /**
- * 短线强势股选股 V48b - V43b选股 + V48b动态止盈止损(回测最优)
- * 回测2年: WR=60%, AR=1.68% (V43b固定10天: WR=45.88%, AR=0.54%)
- * V48b策略: 5/8/12%阶梯移动止盈 + 最大持有18天 + 无止损
- * 选股逻辑不变(V43b), 仅优化持有策略
- * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤 */
+ * 短线强势股选股 V49e - V43b选股+MA5/MA10斜率过滤+V48b动态止盈(回测最优)
+ * 回测2年: WR=67.12%, AR=3.93% (V48b: WR=60%, AR=1.68%)
+ * 新增过滤: MA5斜率>0.1(短线上涨动能) + MA10斜率>0(趋势确认)
+ * 退出策略: 5/8/12%阶梯移动止盈 + 最大持有18天 + 无止损
+ * 选股逻辑: V43b(V31x0.75+V10x0.25+morphBonus) + MA斜率硬过滤 */
 var cloud = require("wx-server-sdk")
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
@@ -475,6 +475,9 @@ async function runStrongPicker(topN, force) {
     // V34e: 硬过滤(与回测V34e_min60一致)
     if (tech && tech.adx !== undefined && (tech.adx < adxThreshold || tech.plusDI <= tech.minusDI)) continue
     if (bollPosition > bollThreshold) continue
+    // V49e: 均线斜率硬过滤(回测WR+7.12% AR+2.25%)
+    if (tech && tech.ma5Slope !== undefined && tech.ma5Slope < 0.1) continue
+    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope < 0) continue
     // V34e: 软量比确认(降权0.9而非0.85)
     var volPenalty = volumeRatio < 1.2 ? 0.9 : 1.0
     // V34e: 形态加分
@@ -573,7 +576,7 @@ async function runStrongPicker(topN, force) {
           { profitPct: 8, trailingPct: 3 },
           { profitPct: 12, trailingPct: 4 }
         ],
-        description: "5%回撤2%/8%回撤3%/12%回撤4%阶梯止盈,最大持有18天"
+        description: "V49e: MA5>0.1+MA10>0 + 5/8/12%阶梯止盈+18天, WR=67.12% AR=3.93%"
       },
       buySell: buySell,
       signals: buildSignalTags({

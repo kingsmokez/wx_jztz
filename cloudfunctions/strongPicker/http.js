@@ -657,6 +657,7 @@ function calcTechFromKlines(klines) {
   var adxObj = klines.length >= 30 ? calcADX(klines, 14) : { adx: 0, plusDI: 0, minusDI: 0 }
   var obvObj = klines.length >= 21 ? calcOBV(klines) : { obv: 0, obvSlope5: 0, obvTrend: 0 }
   var ma5Slope = calcMASlope(closes, 5)
+  var ma10Slope = calcMASlope(closes, 10)
   var patterns = klines.length >= 25 ? detectPatterns(klines) : null
   var vpCoord = klines.length >= 10 ? calcVolumePriceCoord(klines) : { score: 50, trend: "neutral" }
   var trendAccel = closes.length >= 20 ? calcTrendAcceleration(closes) : { accelerating: false, score: 0, accelRatio: 0 }
@@ -673,7 +674,7 @@ function calcTechFromKlines(klines) {
     macd: goldenCross ? 1 : (dif < prevDif ? -1 : 0),
     adx: adxObj.adx, plusDI: adxObj.plusDI, minusDI: adxObj.minusDI,
     obvTrend: obvObj.obvTrend, obvSlope5: obvObj.obvSlope5,
-    ma5Slope: ma5Slope, patterns: patterns,
+    ma5Slope: ma5Slope, ma10Slope: ma10Slope, patterns: patterns,
     vpCoord: vpCoord, trendAccel: trendAccel,
     consolidationBreakout: consolidationBreakout, candlePatterns: candlePatterns,
   }
