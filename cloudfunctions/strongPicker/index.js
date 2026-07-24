@@ -1,6 +1,6 @@
 /**
- * 短线强势股选股 V34e - 自适应市场+硬过滤+动态连涨+形态加分(与回测一致)
- * 回测2年: 10dWR=50.36%(首破50%), 10dAR=1.26%
+ * 短线强势股选股 V39d - V34e+价格位置95%+相对强度>0(回测最优)
+ * 回测2年: 10dWR=56.82%, 10dAR=2.12% (V34e: 10dWR=50.36%, 10dAR=1.26%)
  * V33f基准
  * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
  * V31五维度: 资金活跃度(30)+趋势确认(25)+量价配合(20)+形态信号(15)+位置安全(10)
@@ -233,6 +233,35 @@ function calcConsecutiveUpDays(klines) {
 /**
  * V34e: 简化市场环境判断
  */
+/**
+ * V39d: 计算价格相对60日最高价的位置
+ * 回测发现: 价格在60日高点95%以上的股票胜率显著更高
+ * @returns {number} 0-1, 当前价/60日最高价
+ */
+function calcPricePositionVsHigh(klines) {
+  if (!klines || klines.length < 20) return 0
+  var high60 = -Infinity
+  var startIdx = Math.max(0, klines.length - 60)
+  for (var i = startIdx; i < klines.length; i++) {
+    if (klines[i].high > high60) high60 = klines[i].high
+  }
+  if (high60 <= 0) return 0
+  return klines[klines.length - 1].close / high60
+}
+
+/**
+ * V39d: 计算相对强度(20日涨幅)
+ * 回测发现: 20日涨幅为正的股票后续表现更好
+ * @returns {number} 20日涨幅百分比
+ */
+function calcRelativeStrength(klines) {
+  if (!klines || klines.length < 21) return 0
+  var today = klines[klines.length - 1].close
+  var day20 = klines[klines.length - 21].close
+  if (day20 <= 0) return 0
+  return (today - day20) / day20 * 100
+}
+
 function calcSimpleMarketEnv(marketEnv) {
   if (!marketEnv) return { trend: "neutral" }
   var chg = marketEnv.changePct || 0
@@ -461,6 +490,16 @@ async function runStrongPicker(topN, force) {
     var rankingScore = v31Score * 0.75 + v10Score * 0.25 + morphBonus
     // V34e: VP背离硬过滤
     if (vpFiltered) continue
+    // V39d: 价格位置过滤 - 当前价/60日最高价 >= 95%
+    if (klines && klines.length >= 20) {
+      var pricePosVsHigh = calcPricePositionVsHigh(klines)
+      if (pricePosVsHigh < 0.95) continue
+    }
+    // V39d: 相对强度过滤 - 20日涨幅 >= 0%
+    if (klines && klines.length >= 21) {
+      var relStrength = calcRelativeStrength(klines)
+      if (relStrength < 0) continue
+    }
     rankingScore *= volPenalty
     rankingScore = Math.round(rankingScore)
     // V34e: minScore=60，选股少但精
