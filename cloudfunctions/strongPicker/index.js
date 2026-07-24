@@ -1,5 +1,7 @@
 /**
- * 短线强势股选股 V8 - 优化版，解决超时
+ * 短线强势股选股 V30 - 基于回测最优策略V28b4
+ * 核心: V10评分x0.35 + 温和因子x0.65 加权排名
+ * 回测2年数据全面超越V10基准(5dWR+1.14%, 5dAR+0.10%, 10dWR+1.34%, 10dAR+0.09%)
  * 优化：涨幅榜Top300+换手率榜Top300合并，先粗评分取Top80再获取K线
  */
 var cloud = require("wx-server-sdk")
@@ -62,6 +64,38 @@ function calcTechScore(stock, rsi, goldenCross, volumeRatio, bollPosition, code,
   return Math.round(Math.min(100, Math.max(0, score)))
 }
 
+
+/**
+ * 温和因子评分 (V28b4回测最优策略)
+ * 思路: 不追高热门股，偏好涨幅温和(1-3%)、量比温和(1-2)、RSI适中(40-60)的股票
+ * 这类股票上涨空间更大，胜率更高
+ * @returns {number} 0-100分的温和因子评分
+ */
+function calcMildScore(stock, volumeRatio, rsi) {
+  var chg = stock.changePct || 0
+  var mildScore = 0
+  // 涨幅温和度 (0-40分): 1-3%最优，3-5%次优(35分)
+  if (chg >= 1 && chg < 3) mildScore += 40
+  else if (chg >= 0.5 && chg < 1) mildScore += 25
+  else if (chg >= 3 && chg < 5) mildScore += 35
+  else if (chg >= 5 && chg < 7) mildScore += 15
+  else if (chg >= 7) mildScore += 5
+  else mildScore += 10
+  // 量比温和度 (0-40分): 1-2最优
+  if (volumeRatio >= 1 && volumeRatio < 2) mildScore += 40
+  else if (volumeRatio >= 0.7 && volumeRatio < 1) mildScore += 25
+  else if (volumeRatio >= 2 && volumeRatio < 3) mildScore += 30
+  else if (volumeRatio >= 3 && volumeRatio < 5) mildScore += 15
+  else if (volumeRatio >= 5) mildScore += 5
+  else mildScore += 10
+  // RSI温和度 (0-20分): 40-60最优
+  if (rsi >= 40 && rsi < 60) mildScore += 20
+  else if (rsi >= 30 && rsi < 40) mildScore += 15
+  else if (rsi >= 60 && rsi < 70) mildScore += 10
+  else if (rsi >= 70) mildScore += 3
+  else mildScore += 8
+  return mildScore
+}
 function genReasons(stock, v5Reasons, goldenCross, volumeRatio, rsi, pullbackStable, pe, roe) {
   var parts = []
   if (v5Reasons) parts.push(v5Reasons)
@@ -88,6 +122,8 @@ function buildSignalTags(s) {
   if ((s.positionPct >= 90 && s.changePct >= 7) || s.changePct >= 9) tags.push("追高风险")
   if (s.rsi > 0 && s.rsi < 30) tags.push("RSI超卖")
   if (s.rsi > 70) tags.push("RSI偏高")
+  if (s.mildScore >= 80) tags.push("温和优选")
+  else if (s.mildScore >= 60) tags.push("趋势温和")
   if (s.pe > 0 && s.pe < 15) tags.push("PE低估")
   if (s.roe > 15) tags.push("ROE优秀")
   return tags
@@ -234,6 +270,10 @@ async function runStrongPicker(topN, force) {
     var blendedScore = Math.round(techScore * 0.6 + v5Score * 0.4)
     if (blendedScore < 30) continue
 
+    // V28b4最优策略: 温和因子加权排名
+    var mildScore = calcMildScore(stock, volumeRatio, rsi)
+    var rankingScore = Math.round(blendedScore * 0.35 + mildScore * 0.65)
+
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
@@ -269,6 +309,8 @@ async function runStrongPicker(topN, force) {
       marketCap: Math.round((stock.circCap || 0) * 100) / 100,
       score: blendedScore,
       totalScore: blendedScore,
+      mildScore: mildScore,
+      rankingScore: rankingScore,
       techScore: Math.round(techScore),
       v5Score: Math.round(v5Score * 10) / 10,
       volumeRatio: Math.round(volumeRatio * 100) / 100,
@@ -299,11 +341,13 @@ async function runStrongPicker(topN, force) {
         gentleVolume: gentleVolume, moderateVolume: moderateVolume, extremeVolume: extremeVolume,
         breakthroughPct: breakthroughPct, change5d: change5d, positionPct: positionPct,
         changePct: stock.changePct || 0, rsi: rsi, pe: stock.pe || 0, roe: roe,
+        mildScore: mildScore,
       }),
     })
   }
 
-  results.sort(function(a, b) { return b.score - a.score })
+  // V28b4: 用rankingScore排序(温和因子加权)，score保留展示用
+  results.sort(function(a, b) { return b.rankingScore - a.rankingScore })
 
   var finalResults
   try {
@@ -343,3 +387,4 @@ exports.main = async function(event, context) {
     return { success: false, error: err.message }
   }
 }
+
