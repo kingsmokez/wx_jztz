@@ -212,6 +212,21 @@ function calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, co
   return Math.round(Math.min(100, Math.max(0, score)))
 }
 
+/**
+ * V33: 计算连涨天数（用于过滤追高风险）
+ */
+function calcConsecutiveUpDays(klines) {
+  if (!klines || klines.length < 2) return 0
+  var count = 0
+  for (var i = klines.length - 1; i >= 1; i--) {
+    if (klines[i].close > klines[i - 1].close) count++
+    else break
+  }
+  return count
+}
+
+
+
 
 function genReasons(stock, v5Reasons, goldenCross, volumeRatio, rsi, pullbackStable, pe, roe) {
   var parts = []
@@ -389,10 +404,9 @@ async function runStrongPicker(topN, force) {
 
     // V28b4最优策略: 温和因子加权排名
     var mildScore = calcMildScore(stock, volumeRatio, rsi)
-// V32b: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
+// V33f: V31评分x0.75 + V10评分x0.25 + ADX/VP/BOLL过滤 + 连涨限制 + 量比确认 + 形态加分
     var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
     var v10Score = blendedScore
-    var rankingScore = v31Score * 0.75 + v10Score * 0.25
     // ADX过滤: ADX>=20且+DI>-DI
     var adxFiltered = false
     if (tech && tech.adx !== undefined && (tech.adx < 20 || tech.plusDI <= tech.minusDI)) adxFiltered = true
@@ -402,12 +416,27 @@ async function runStrongPicker(topN, force) {
     // BOLL位置过滤: bollPosition>0.85
     var bollFiltered = false
     if (bollPosition > 0.85) bollFiltered = true
-    // 过滤标记(不直接排除，降低评分)
+    // V33: 连涨5天以上过滤(追高风险大)
+    // V33: 连涨>5天排除(追高风险)
+    if (klines && klines.length >= 2) {
+      var consecUp = calcConsecutiveUpDays(klines)
+      if (consecUp > 5) continue
+    }
+    // V33: 量比确认(>=1.2)
+    var volConfirm = volumeRatio >= 1.2
+    // V33: 形态加分
+    var morphBonus = 0
+    if (tech) {
+      if (tech.consolidationBreakout && tech.consolidationBreakout.score >= 70) morphBonus += 5
+      if (tech.trendAccel && tech.trendAccel.accelerating) morphBonus += 3
+      if (tech.candlePatterns && tech.candlePatterns.score >= 15) morphBonus += 3
+    }
+    var rankingScore = v31Score * 0.75 + v10Score * 0.25 + morphBonus
     if (adxFiltered) rankingScore *= 0.7
     if (vpFiltered) rankingScore *= 0.6
     if (bollFiltered) rankingScore *= 0.8
+    if (!volConfirm) rankingScore *= 0.85
     rankingScore = Math.round(rankingScore)
-
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
