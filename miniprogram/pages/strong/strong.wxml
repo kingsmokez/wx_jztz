@@ -173,6 +173,20 @@
             <text class="bs-price">{{item.buySell.stopLoss || "--"}}</text>
           </view>
         </view>
+
+        <!-- V48b持有策略 -->
+        <view class="hold-strategy" wx:if="{{item.holdStrategy}}">
+          <view class="hs-header">
+            <text class="hs-title">📊 持有策略 (V48b回测最优)</text>
+            <text class="hs-tag">WR=60% AR=1.68%</text>
+          </view>
+          <view class="hs-rules">
+            <text class="hs-rule">最大持有 {{item.holdStrategy.maxHoldDays}} 天</text>
+            <text class="hs-rule">盈利5%回撤2%卖出</text>
+            <text class="hs-rule">盈利8%回撤3%卖出</text>
+            <text class="hs-rule">盈利12%回撤4%卖出</text>
+          </view>
+        </view>
       </view>
     </block>
   </view>

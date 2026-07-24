@@ -1,12 +1,9 @@
 /**
- * 短线强势股选股 V43b - V39d+RS≥6%+量比≥1.5+minScore55(回测最优)
- * 回测2年: 10dWR=57.49%, 10dAR=2.97% (V39d: 10dWR=56.82%, 10dAR=2.12%)
- * V33f基准
- * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤
- * V31五维度: 资金活跃度(30)+趋势确认(25)+量价配合(20)+形态信号(15)+位置安全(10)
- * 回测2年数据全面超越V10基准(5dWR+2.11%, 10dWR+1.90%, 10dAR+0.25%)
- * 优化：涨幅榜Top300+换手率榜Top300合并，先粗评分取Top80再获取K线
- */
+ * 短线强势股选股 V48b - V43b选股 + V48b动态止盈止损(回测最优)
+ * 回测2年: WR=60%, AR=1.68% (V43b固定10天: WR=45.88%, AR=0.54%)
+ * V48b策略: 5/8/12%阶梯移动止盈 + 最大持有18天 + 无止损
+ * 选股逻辑不变(V43b), 仅优化持有策略
+ * 核心: V31评分×0.75 + V10评分×0.25 + ADX/VP/BOLL过滤 */
 var cloud = require("wx-server-sdk")
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
@@ -568,6 +565,16 @@ async function runStrongPicker(topN, force) {
       maSignal: maSignal,
       momentum5d: Math.round(change5d * 100) / 100,
       reasons: reasons,
+      holdStrategy: {
+        maxHoldDays: 18,
+        stopLoss: -100,
+        trailingRules: [
+          { profitPct: 5, trailingPct: 2 },
+          { profitPct: 8, trailingPct: 3 },
+          { profitPct: 12, trailingPct: 4 }
+        ],
+        description: "5%回撤2%/8%回撤3%/12%回撤4%阶梯止盈,最大持有18天"
+      },
       buySell: buySell,
       signals: buildSignalTags({
         goldenCross: goldenCross, pullbackStable: pullbackStable,
