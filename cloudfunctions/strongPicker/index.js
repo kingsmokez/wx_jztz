@@ -1,10 +1,10 @@
-/**
- * 短线强势股选股 V69 - boll_squeeze+多因子精选+ADX趋势确认
- * 回测2年: WR=81.04% AR=1.88% n=211 (V63: WR=77.78% AR=5.23% n=36)
- * 核心形态: 布林收窄突破(boll_squeeze) + 涨幅0.5-3% + 量比>=1.8
+﻿/**
+ * 短线强势股选股 V70 - boll_squeeze+窄幅精选+ADX趋势确认
+ * 回测2年: WR=82.74% AR=2.06% n=168 (V69: WR=81.04% AR=1.88% n=211)
+ * 核心形态: 布林收窄突破(boll_squeeze) + 涨幅1-2.5% + 量比>=1.8
  * 趋势确认: MA5>0.1 + MA10>0.02 + ADX>20
  * 退出策略: 3/5/8%阶梯移动止盈(1/2/3%回撤) + 最大持有21天 + 无止损
- * 选股逻辑: boll_squeeze硬过滤 + 多因子硬过滤 */
+ * 选股逻辑: boll_squeeze硬过滤 + 窄幅精选(1-2.5%) + 多因子硬过滤 */
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
 var _ = db.command
@@ -500,8 +500,8 @@ async function runStrongPicker(topN, force) {
       if (low5 > 0 && ((high5 - low5) / low5 * 100) < 5 && lastK2.close > high5) hasBollSqueeze = true
     }
     if (!hasBollSqueeze) continue
-    // V69: 涨幅0.5-3%过滤(避免追高和弱势)
-    if ((stock.changePct || 0) < 0.5 || (stock.changePct || 0) > 3) continue
+    // V70: 涨幅1-2.5%精选(趋势初起，避免追高和弱势)
+    if ((stock.changePct || 0) < 1 || (stock.changePct || 0) > 2.5) continue
     // V69: 量比>=1.8(更严格量能确认)
     if (volumeRatio < 1.8) continue
     var volPenalty = volumeRatio < 1.2 ? 0.9 : 1.0
@@ -601,7 +601,7 @@ async function runStrongPicker(topN, force) {
           { profitPct: 5, trailingPct: 2 },
           { profitPct: 8, trailingPct: 3 }
         ],
-        description: "V69: boll_squeeze+涨幅0.5-3%+量比>=1.8+MA10>0.02+ADX>20 + 3/5/8%阶梯止盈+21天, WR=81.04% AR=1.88%"
+        description: "V70: boll_squeeze+涨幅1-2.5%+量比>=1.8+MA10>0.02+ADX>20 + 3/5/8%阶梯止盈+21天, WR=82.74% AR=2.06%"
       },
       buySell: buySell,
       signals: buildSignalTags({
