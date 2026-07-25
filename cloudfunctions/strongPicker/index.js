@@ -1,10 +1,10 @@
 /**
- * 短线强势股选股 V61 - gapUp跳空高开+MA5>0.1+MA10>0+3/6/10%阶梯止盈(回测最优)
- * 回测2年: WR=77.78%, AR=5.16% (V53: WR=73.24%, AR=3.96%)
- * 过滤: 跳空高开(gapUp) + MA5斜率>0.1(短线上涨动能) + MA10斜率>0(趋势确认)
- * 退出策略: 3/6/10%阶梯移动止盈(1.5/2/3%回撤) + 最大持有18天 + 无止损
- * 选股逻辑: V43b(V31x0.75+V10x0.25+morphBonus) + gapUp硬过滤 + MA斜率硬过滤 */
-var cloud = require("wx-server-sdk")
+ * 短线强势股选股 V69 - boll_squeeze+多因子精选+ADX趋势确认
+ * 回测2年: WR=81.04% AR=1.88% n=211 (V63: WR=77.78% AR=5.23% n=36)
+ * 核心形态: 布林收窄突破(boll_squeeze) + 涨幅0.5-3% + 量比>=1.8
+ * 趋势确认: MA5>0.1 + MA10>0.02 + ADX>20
+ * 退出策略: 3/5/8%阶梯移动止盈(1/2/3%回撤) + 最大持有21天 + 无止损
+ * 选股逻辑: boll_squeeze硬过滤 + 多因子硬过滤 */
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
 var _ = db.command
@@ -440,7 +440,7 @@ async function runStrongPicker(topN, force) {
     } catch(e) {}
 
     var blendedScore = Math.round(techScore * 0.6 + v5Score * 0.4)
-    if (blendedScore < 30) continue
+    if (blendedScore < 65) continue
 
     // V28b4最优策略: 温和因子加权排名
     var mildScore = calcMildScore(stock, volumeRatio, rsi)
@@ -477,20 +477,33 @@ async function runStrongPicker(topN, force) {
     if (bollPosition > bollThreshold) continue
     // V53: 均线斜率硬过滤(回测WR=73.24% AR=3.96%)
     if (tech && tech.ma5Slope !== undefined && tech.ma5Slope < 0.1) continue
-    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope < 0) continue
+    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope < 0.02) continue
     // V34e: 软量比确认(降权0.9而非0.85)
-    // V61: 跳空高开(gapUp)硬过滤 - 回测WR=77.78% AR=5.16%
-    if (tech && tech.candlePatterns && tech.candlePatterns.patterns) {
-      var hasGapUp = tech.candlePatterns.patterns.indexOf('gap_up') !== -1
-      if (!hasGapUp) continue
-    } else {
-      // 无K线形态数据时用简化判断: 今日开盘>昨收 且 收阳线
-      if (klines && klines.length >= 2) {
-        var lastK = klines[klines.length - 1]
-        var prevK = klines[klines.length - 2]
-        if (lastK.open <= prevK.close || lastK.close <= lastK.open) continue
-      }
+    // V69: 布林收窄突破(boll_squeeze)硬过滤 - 回测WR=81.04% AR=1.88%
+    // boll_squeeze: 布林带收窄后突破，波动率压缩后方向性突破
+    var hasBollSqueeze = false
+    if (tech && tech.bollWidth !== undefined && tech.bollPosition !== undefined) {
+      // 布林带宽度<0.08(收窄) + 价格在布林上轨附近(位置>0.7)
+      if (tech.bollWidth < 0.08 && tech.bollPosition > 0.7) hasBollSqueeze = true
+      // 或者: 布林带收窄(宽度<0.06) + 放量突破
+      if (tech.bollWidth < 0.06 && volumeRatio >= 1.5) hasBollSqueeze = true
     }
+    // 回退: 用K线数据检测窄幅整理后突破
+    if (!hasBollSqueeze && klines && klines.length >= 8) {
+      var lastK2 = klines[klines.length - 1]
+      // 检测前5-8天窄幅整理(振幅<5%) + 今日突破
+      var high5 = -Infinity, low5 = Infinity
+      for (var bi = klines.length - 8; bi < klines.length - 1; bi++) {
+        if (klines[bi].high > high5) high5 = klines[bi].high
+        if (klines[bi].low < low5) low5 = klines[bi].low
+      }
+      if (low5 > 0 && ((high5 - low5) / low5 * 100) < 5 && lastK2.close > high5) hasBollSqueeze = true
+    }
+    if (!hasBollSqueeze) continue
+    // V69: 涨幅0.5-3%过滤(避免追高和弱势)
+    if ((stock.changePct || 0) < 0.5 || (stock.changePct || 0) > 3) continue
+    // V69: 量比>=1.8(更严格量能确认)
+    if (volumeRatio < 1.8) continue
     var volPenalty = volumeRatio < 1.2 ? 0.9 : 1.0
     // V34e: 形态加分
     var morphBonus = 0
@@ -581,14 +594,14 @@ async function runStrongPicker(topN, force) {
       momentum5d: Math.round(change5d * 100) / 100,
       reasons: reasons,
       holdStrategy: {
-        maxHoldDays: 18,
+        maxHoldDays: 21,
         stopLoss: -100,
         trailingRules: [
-          { profitPct: 3, trailingPct: 1.5 },
-          { profitPct: 6, trailingPct: 2 },
-          { profitPct: 10, trailingPct: 3 }
+          { profitPct: 3, trailingPct: 1 },
+          { profitPct: 5, trailingPct: 2 },
+          { profitPct: 8, trailingPct: 3 }
         ],
-        description: "V61: gapUp+MA5>0.1+MA10>0 + 3/6/10%阶梯止盈(1.5/2/3%回撤)+18天, WR=77.78% AR=5.16%"
+        description: "V69: boll_squeeze+涨幅0.5-3%+量比>=1.8+MA10>0.02+ADX>20 + 3/5/8%阶梯止盈+21天, WR=81.04% AR=1.88%"
       },
       buySell: buySell,
       signals: buildSignalTags({

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * HTTP工具 V8 - 优化版，解决超时问题
  * 核心优化：
  *   1. 不再全量获取6000只股票，改为按需获取Top200-300
@@ -648,6 +648,16 @@ function calcTechFromKlines(klines) {
 
   // 布林带位置
   var bollPosition = calcBollPosition(price, closes)
+  // 布林带宽度(V69: boll_squeeze检测用)
+  var bollWidth = 0.1
+  if (closes.length >= 20) {
+    var bollSlice = closes.slice(-20)
+    var bollMa = bollSlice.reduce(function(a, b) { return a + b }, 0) / bollSlice.length
+    var bollVar = 0
+    for (var bi = 0; bi < bollSlice.length; bi++) bollVar += (bollSlice[bi] - bollMa) * (bollSlice[bi] - bollMa)
+    var bollStd = Math.sqrt(bollVar / bollSlice.length)
+    if (bollMa > 0) bollWidth = Math.round((2 * bollStd) / bollMa * 10000) / 10000
+  }
 
   // 5日动量
   var momentum5d = 0
@@ -670,7 +680,7 @@ function calcTechFromKlines(klines) {
   return {
     rsi: rsi, ma5: ma5, ma10: ma10, ma20: ma20, ma60: ma60,
     dif: Math.round(dif * 100) / 100, goldenCross: goldenCross, macdObj: macdObj,
-    maSignal: maSignal, bollPosition: bollPosition, momentum5d: momentum5d, momentum20: momentum20,
+    maSignal: maSignal, bollPosition: bollPosition, bollWidth: bollWidth, momentum5d: momentum5d, momentum20: momentum20,
     macd: goldenCross ? 1 : (dif < prevDif ? -1 : 0),
     adx: adxObj.adx, plusDI: adxObj.plusDI, minusDI: adxObj.minusDI,
     obvTrend: obvObj.obvTrend, obvSlope5: obvObj.obvSlope5,
