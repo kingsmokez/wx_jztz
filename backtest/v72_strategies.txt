@@ -1,0 +1,92 @@
+﻿var V72_STRATEGIES = {
+  "v72_v71base": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi60": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 60
+  },
+  "v72_rsi55": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 55
+  },
+  "v72_rsi65_sc70": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 70, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_sc75": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 75, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_4710": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 4, trailingPct: 1 }, { profitPct: 7, trailingPct: 2 }, { profitPct: 10, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_25d": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }, { profitPct: 12, trailingPct: 4 }
+    ], maxHoldDays: 25, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_vr20": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 2.0, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_adx25": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 25, rsiMax: 65
+  },
+  "v72_rsi65_chg08_2": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 0.8, chgMax: 2, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_chg12_3": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1.2, chgMax: 3, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_ma5_015": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.15, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_rsi65_ma10_003": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.03, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+  "v72_sc70_4710": {
+    stopLoss: -100, trailingRules: [
+      { profitPct: 4, trailingPct: 1 }, { profitPct: 7, trailingPct: 2 }, { profitPct: 10, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 70, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20
+  },
+  "v72_rsi65_sl8": {
+    stopLoss: -8, trailingRules: [
+      { profitPct: 3, trailingPct: 1 }, { profitPct: 5, trailingPct: 2 }, { profitPct: 8, trailingPct: 3 }
+    ], maxHoldDays: 21, ma5Min: 0.1, ma10Min: 0.02, requirePattern: 'boll_squeeze', minScore: 65, patternWeight: 2.0,
+    chgMin: 1, chgMax: 2.5, vrMin: 1.8, adxMin: 20, rsiMax: 65
+  },
+}
