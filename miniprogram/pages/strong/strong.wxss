@@ -57,13 +57,13 @@ page { background: var(--bg); }
 .card-rank { font-size: 14px; font-weight: 900; color: var(--loot-dark); }
 .card-rank-row { display: flex; align-items: center; gap: 8px; }
 .card-rec-tag {
-  font-size: 11px; font-weight: 800; padding: 1px 6px;
+  font-size: 12px; font-weight: 800; padding: 2px 8px;
   border: 2px solid var(--border);
   display: inline-block;
   line-height: 1.4;
 }
 .card-rec-tag.rec-strong {
-  font-size: 11px !important; padding: 1px 6px !important;
+  font-size: 12px !important; padding: 2px 8px !important;
   background: linear-gradient(135deg, #FF6B00, #FF4081);
   color: #FFFFFF !important;
   border-color: var(--border) !important;
@@ -71,19 +71,19 @@ page { background: var(--bg); }
   letter-spacing: 0 !important;
 }
 .card-rec-tag.rec-buy {
-  font-size: 11px !important; padding: 1px 6px !important;
+  font-size: 11px !important; padding: 2px 8px !important;
   background: var(--loot-green);
   color: #FFFFFF !important;
   border-color: var(--border) !important;
 }
 .card-rec-tag.rec-watch {
-  font-size: 10px !important; padding: 1px 6px !important;
+  font-size: 10px !important; padding: 2px 8px !important;
   background: var(--loot-blue);
   color: #FFFFFF !important;
   border-color: var(--border) !important;
 }
 .card-rec-tag.rec-caution {
-  font-size: 10px !important; padding: 1px 6px !important;
+  font-size: 10px !important; padding: 2px 8px !important;
   background: var(--surface-2);
   color: var(--fg) !important;
   border-color: var(--border-light) !important;

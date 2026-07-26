@@ -144,8 +144,14 @@ async function fetchEMByField(fid, topN) {
         "&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23" +
         "&fields=f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23,f100"
       var text = await request(url, {
-        timeout: 8000,
-        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" }
+        timeout: 10000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Referer": "https://quote.eastmoney.com/",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+          "Connection": "keep-alive"
+        }
       })
       var data = JSON.parse(text)
       if (!data || !data.data || !data.data.diff) continue
@@ -936,10 +942,8 @@ async function fetchIndustryBatch(codes) {
   if (!codes || codes.length === 0) return {}
   var result = {}
   var totalStart = Date.now()
-  // 总超时保护：行业查询最多15秒
-  var MAX_INDUSTRY_TIME = 15000
+  var MAX_INDUSTRY_TIME = 20000
 
-  // === 主源：东财datacenter 批量查询申万二级行业 ===
   var batchSize = 50
   for (var b = 0; b < codes.length; b += batchSize) {
     if (Date.now() - totalStart > MAX_INDUSTRY_TIME) {
@@ -954,8 +958,8 @@ async function fetchIndustryBatch(codes) {
         "&filter=(SECURITY_CODE%20in%20(" + encodeURIComponent(codeList) + "))" +
         "&pageSize=200&source=WEB&client=WEB"
       var text = await request(url, {
-        timeout: 6000,
-        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://data.eastmoney.com/" }
+        timeout: 8000,
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://data.eastmoney.com/", "Accept": "application/json" }
       })
       var data = JSON.parse(text)
       if (data.result && data.result.data && data.result.data.length > 0) {
@@ -977,10 +981,9 @@ async function fetchIndustryBatch(codes) {
   }
   console.log("[行业API-批量] 成功 " + Object.keys(result).length + "/" + codes.length + " 只, 耗时 " + (Date.now() - totalStart) + "ms")
 
-  // === 备用源1：对批量查询失败的股票，逐个查询（最多10只，超时保护）===
   var failed = codes.filter(function(c) { return !result[c] })
   if (failed.length > 0 && Date.now() - totalStart < MAX_INDUSTRY_TIME) {
-    var maxOneByOne = Math.min(failed.length, 10)  // 最多逐个查10只
+    var maxOneByOne = Math.min(failed.length, 20)
     console.log("[行业API-逐个] 尝试 " + maxOneByOne + "/" + failed.length + " 只失败股票")
     var concurrency = 10
     var idx = 0
@@ -990,8 +993,8 @@ async function fetchIndustryBatch(codes) {
           "&columns=SECURITY_CODE,BOARD_NAME&filter=(SECURITY_CODE=%22" + code + "%22)" +
           "&pageSize=1&source=WEB&client=WEB"
         var text = await request(url, {
-          timeout: 2000,
-          headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://data.eastmoney.com/" }
+          timeout: 3000,
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Referer": "https://data.eastmoney.com/" }
         })
         var data = JSON.parse(text)
         if (data.result && data.result.data && data.result.data.length > 0) {
@@ -1001,7 +1004,7 @@ async function fetchIndustryBatch(codes) {
             result[code] = boardName
           }
         }
-      } catch(e) { /* 静默失败 */ }
+      } catch(e) {}
     }
     while (idx < maxOneByOne && Date.now() - totalStart < MAX_INDUSTRY_TIME) {
       var batch = []
@@ -1013,10 +1016,9 @@ async function fetchIndustryBatch(codes) {
     console.log("[行业API-逐个] 补充后共 " + Object.keys(result).length + "/" + codes.length + " 只")
   }
 
-  // === 备用源2：东财F10个股详情API（EM2016字段，最多5只，超时保护）===
   var stillFailed = codes.filter(function(c) { return !result[c] })
   if (stillFailed.length > 0 && Date.now() - totalStart < MAX_INDUSTRY_TIME) {
-    var maxF10 = Math.min(stillFailed.length, 5)  // 最多F10查5只
+    var maxF10 = Math.min(stillFailed.length, 10)
     console.log("[行业API-F10] 尝试 " + maxF10 + "/" + stillFailed.length + " 只仍未获取行业股票")
     var f10Idx = 0
     async function fetchF10One(code) {
@@ -1024,8 +1026,8 @@ async function fetchIndustryBatch(codes) {
         var prefix = (code.startsWith("6") || code.startsWith("9")) ? "SH" : "SZ"
         var url = "https://emweb.securities.eastmoney.com/PC_HSF10/CompanySurvey/PageAjax?code=" + prefix + code
         var text = await request(url, {
-          timeout: 3000,
-          headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://emweb.securities.eastmoney.com/" }
+          timeout: 4000,
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Referer": "https://emweb.securities.eastmoney.com/" }
         })
         var m = text.match(/"EM2016":"([^"]+)"/)
         if (m && m[1]) {
@@ -1037,7 +1039,7 @@ async function fetchIndustryBatch(codes) {
             result[code] = em2016
           }
         }
-      } catch(e) { /* 静默失败 */ }
+      } catch(e) {}
     }
     while (f10Idx < maxF10 && Date.now() - totalStart < MAX_INDUSTRY_TIME) {
       var f10Batch = []
@@ -1049,9 +1051,43 @@ async function fetchIndustryBatch(codes) {
     console.log("[行业API-F10] 补充后共 " + Object.keys(result).length + "/" + codes.length + " 只")
   }
 
+  var thirdFailed = codes.filter(function(c) { return !result[c] })
+  if (thirdFailed.length > 0 && Date.now() - totalStart < MAX_INDUSTRY_TIME) {
+    var maxEM = Math.min(thirdFailed.length, 20)
+    console.log("[行业API-行情] 尝试 " + maxEM + "/" + thirdFailed.length + " 只仍未获取行业股票")
+    var emIdx = 0
+    async function fetchEMIndustry(code) {
+      try {
+        var secid = code.startsWith("6") ? "1." + code : "0." + code
+        var url = "https://push2.eastmoney.com/api/qt/stock/get?secid=" + secid +
+          "&fields=f100&ut=fa5fd1943c73938dc84456f6acb3b54"
+        var text = await request(url, {
+          timeout: 3000,
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Referer": "https://quote.eastmoney.com/" }
+        })
+        var data = JSON.parse(text)
+        if (data.data && data.data.f100) {
+          var f100 = String(data.data.f100)
+          if (f100 && f100 !== "-" && f100 !== "") {
+            result[code] = f100
+          }
+        }
+      } catch(e) {}
+    }
+    while (emIdx < maxEM && Date.now() - totalStart < MAX_INDUSTRY_TIME) {
+      var emBatch = []
+      for (var m2 = 0; m2 < 10 && emIdx < maxEM; m2++) {
+        emBatch.push(fetchEMIndustry(thirdFailed[emIdx++]))
+      }
+      await Promise.all(emBatch)
+    }
+    console.log("[行业API-行情] 补充后共 " + Object.keys(result).length + "/" + codes.length + " 只")
+  }
+
   console.log("[行业API] 最终获取 " + Object.keys(result).length + "/" + codes.length + " 只行业, 总耗时 " + (Date.now() - totalStart) + "ms")
   return result
 }
+
 function guessIndustry(name, code, emIndustry, apiIndustry) {
   // === 优先级1：API实时获取的行业（东财datacenter申万行业）===
   if (apiIndustry && apiIndustry !== "" && apiIndustry !== "-") {
@@ -1215,6 +1251,29 @@ async function fetchHS300() {
       }
     }
   } catch(e) { console.warn("[沪深300-东财] 失败:", e.message) }
+
+  // 源3: 腾讯行情（最稳定的备用源）
+  try {
+    var text = await request("https://qt.gtimg.cn/q=sh000300", {
+      timeout: 3000,
+      encoding: "gbk",
+      headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/" }
+    })
+    var match = text.match(/v_[^=]+="([^"]+)"/)
+    if (match) {
+      var parts = match[1].split("~")
+      if (parts.length >= 33) {
+        var cur = parseFloat(parts[3]) || 0
+        var prevClose = parseFloat(parts[4]) || 0
+        var cp = parseFloat(parts[32]) || 0
+        if (cur > 0 && prevClose > 0) {
+          var st = cp > 2 ? "大涨" : cp > 0.5 ? "上涨" : cp > -0.5 ? "震荡" : cp > -2 ? "下跌" : "大跌"
+          console.log("[沪深300-腾讯] " + st + " " + cp + "%")
+          return { status: st, changePct: cp, current: cur, prevClose: prevClose }
+        }
+      }
+    }
+  } catch(e) { console.warn("[沪深300-腾讯] 失败:", e.message) }
 
   console.warn("[沪深300] 所有源失败")
   return null

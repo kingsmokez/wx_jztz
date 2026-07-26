@@ -1,4 +1,4 @@
-﻿# node_modules
+# node_modules
 node_modules/
 cloudfunctions/*/node_modules/
 
@@ -54,3 +54,11 @@ backtest/run_v2.js
 
 # 临时备份
 *.bak
+# 额外临时文件
+strongPicker.zip
+temp_patch.py
+temp_patch2.py
+temp_patch3.py
+backtest/run_v80.js
+backtest/run_v81.js
+cloudfunctions/strongPicker/test_index.js
