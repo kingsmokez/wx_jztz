@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 早盘集合竞价选股 V6 - 对齐原版 auction_picker.py
  * 两阶段评分: Phase1趋势/量能/位置 + Phase2跳空/量比/竞价金额/大盘
  * 信号: 跳空高开/温和放量/趋势向好/确认信号/换手率激活
@@ -137,15 +137,29 @@ async function runAuctionPicker(topN, force) {
     } catch(e) {}
   }
 
+  // === Phase1: 并行获取大盘+涨幅榜+换手率榜 ===
+  console.log("竞价选股: Phase1并行获取...")
+  var phase1Start = Date.now()
+  var phase1Results = await Promise.all([
+    http.fetchHS300().catch(function(e) { console.warn("沪深300失败:", e.message); return null }),
+    http.fetchStockList("f3", 300).catch(function(e) { console.warn("涨幅榜失败:", e.message); return {} }),
+    http.fetchStockList("f8", 200).catch(function(e) { console.warn("换手率榜失败:", e.message); return {} })
+  ])
+  var hs300 = phase1Results[0]
+  var changeStocks = phase1Results[1]
+  var turnoverStocks = phase1Results[2]
   var marketEnv = { canPick: true, status: "震荡", changePct: 0 }
-  try { var hs300 = await http.fetchHS300(); if (hs300) marketEnv = { canPick: true, status: hs300.status, changePct: hs300.changePct } } catch(e) {}
+  if (hs300) marketEnv = { canPick: true, status: hs300.status, changePct: hs300.changePct }
+  console.log("Phase1完成, 耗时 " + (Date.now() - phase1Start) + "ms")
 
-  // 东财全市场行情
-  console.log("竞价选股: 获取全市场行情...")
-  var startTime = Date.now()
-  var changeStocks = await http.fetchStockList("f3", 300); var turnoverStocks = await http.fetchStockList("f8", 200); var allStocks = {}; var codes1 = Object.keys(changeStocks); var codes2 = Object.keys(turnoverStocks); for (var i = 0; i < codes1.length; i++) allStocks[codes1[i]] = changeStocks[codes1[i]]; for (var i = 0; i < codes2.length; i++) { if (!allStocks[codes2[i]]) allStocks[codes2[i]] = turnoverStocks[codes2[i]] }
+  // 合并去重
+  var allStocks = {}
+  var codes1 = Object.keys(changeStocks)
+  var codes2 = Object.keys(turnoverStocks)
+  for (var i = 0; i < codes1.length; i++) allStocks[codes1[i]] = changeStocks[codes1[i]]
+  for (var i = 0; i < codes2.length; i++) { if (!allStocks[codes2[i]]) allStocks[codes2[i]] = turnoverStocks[codes2[i]] }
   var codes = Object.keys(allStocks)
-  console.log("东财行情: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  console.log("东财行情: " + codes.length + " 只")
 
   if (codes.length < 50) return { stocks: [], marketEnv: marketEnv, cached: false }
 
@@ -167,38 +181,33 @@ async function runAuctionPicker(topN, force) {
 
   if (candidates.length === 0) return { stocks: [], marketEnv: marketEnv, cached: false }
 
-  
-  // 补全财务数据（ROE/毛利率/负债率/换手率/量比）
+  // === Phase2: 并行获取腾讯补全+行业 ===
   var candidateCodes = candidates.map(function(c) { return c.code })
-  console.log("获取腾讯行情补全财务数据...")
-  var tencentStartTime = Date.now()
-  var tencentData = {}
-  try {
-    tencentData = await http.fetchTencentBatch(candidateCodes.slice(0, Math.min(candidateCodes.length, 300)), 80)
-    console.log("腾讯行情补全: " + Object.keys(tencentData).length + " 只, 耗时 " + (Date.now() - tencentStartTime) + "ms")
-    for (var ti = 0; ti < candidates.length; ti++) {
-      var tc = candidates[ti]
-      var td = tencentData[tc.code]
-      if (td) {
-        if (td.roe) tc.roe = td.roe
-        if (td.grossMargin) tc.grossMargin = td.grossMargin
-        if (td.debtRatio) tc.debtRatio = td.debtRatio
-        if (td.turnover && td.turnover > 0) tc.turnover = td.turnover
-        if (td.volumeRatio && td.volumeRatio > 0) tc.volumeRatio = td.volumeRatio
-        if (td.pe && td.pe > 0) tc.pe = td.pe
-        if (td.pb && td.pb > 0) tc.pb = td.pb
-        if (td.circCap && td.circCap > 0) tc.circCap = td.circCap
-      }
+  console.log("Phase2: 并行获取腾讯+行业...")
+  var phase2Start = Date.now()
+  var phase2Results = await Promise.all([
+    http.fetchTencentBatch(candidateCodes.slice(0, Math.min(candidateCodes.length, 300)), 80).catch(function(e) { console.warn("腾讯补全失败:", e.message); return {} }),
+    http.fetchIndustryBatch(candidateCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} })
+  ])
+  var tencentData = phase2Results[0]
+  var industryMap = phase2Results[1]
+  console.log("Phase2完成, 耗时 " + (Date.now() - phase2Start) + "ms, 腾讯=" + Object.keys(tencentData).length + " 行业=" + Object.keys(industryMap).length)
+
+  // 补全财务数据
+  for (var ti = 0; ti < candidates.length; ti++) {
+    var tc = candidates[ti]
+    var td = tencentData[tc.code]
+    if (td) {
+      if (td.roe) tc.roe = td.roe
+      if (td.grossMargin) tc.grossMargin = td.grossMargin
+      if (td.debtRatio) tc.debtRatio = td.debtRatio
+      if (td.turnover && td.turnover > 0) tc.turnover = td.turnover
+      if (td.volumeRatio && td.volumeRatio > 0) tc.volumeRatio = td.volumeRatio
+      if (td.pe && td.pe > 0) tc.pe = td.pe
+      if (td.pb && td.pb > 0) tc.pb = td.pb
+      if (td.circCap && td.circCap > 0) tc.circCap = td.circCap
     }
-  } catch(e) { console.warn("腾讯行情补全失败:", e.message) }
-// 评分
-    // 批量获取行业板块
-  var industryMap = {}
-  startTime = Date.now()
-  try {
-    industryMap = await http.fetchIndustryBatch(candidateCodes)
-    console.log("行业获取: " + Object.keys(industryMap).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
-  } catch(e) { console.warn("行业获取失败:", e.message) }
+  }
 var results = []
   for (var i = 0; i < candidates.length; i++) {
     var stock = candidates[i]

@@ -327,15 +327,20 @@ async function runStrongPicker(topN, force) {
     } catch(e) {}
   }
 
+  // === Phase1: 并行获取大盘+涨幅榜+换手率榜（省8-16秒）===
+  console.log("Phase1: 并行获取大盘+股票列表...")
+  var phase1Start = Date.now()
+  var phase1Results = await Promise.all([
+    http.fetchHS300().catch(function(e) { console.warn("沪深300失败:", e.message); return null }),
+    http.fetchStockList("f3", 300).catch(function(e) { console.warn("涨幅榜失败:", e.message); return {} }),
+    http.fetchStockList("f8", 300).catch(function(e) { console.warn("换手率榜失败:", e.message); return {} })
+  ])
+  var hs300 = phase1Results[0]
+  var changeStocks = phase1Results[1]
+  var turnoverStocks = phase1Results[2]
   var marketEnv = { canPick: true, status: "震荡", changePct: 0 }
-  try { var hs300 = await http.fetchHS300(); if (hs300) marketEnv = { canPick: true, status: hs300.status, changePct: hs300.changePct } } catch(e) {}
-
-  console.log("获取候选股票...")
-  var startTime = Date.now()
-
-  // 优化：只获取涨幅榜Top300 + 换手率榜Top300，不再全量获取6000只
-  var changeStocks = await http.fetchStockList("f3", 300)
-  var turnoverStocks = await http.fetchStockList("f8", 300)
+  if (hs300) marketEnv = { canPick: true, status: hs300.status, changePct: hs300.changePct }
+  console.log("Phase1完成, 耗时 " + (Date.now() - phase1Start) + "ms, 涨幅=" + Object.keys(changeStocks).length + " 换手=" + Object.keys(turnoverStocks).length)
 
   // 合并去重
   var allStocks = {}
@@ -351,7 +356,7 @@ async function runStrongPicker(topN, force) {
     }
   }
   var codes = Object.keys(allStocks)
-  console.log("候选股票: " + codes.length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
+  console.log("候选股票: " + codes.length + " 只")
 
   // 粗筛选
   var candidates = []
@@ -366,34 +371,22 @@ async function runStrongPicker(topN, force) {
     if (qs >= 25) candidates.push({ stock: stock, quickScore: qs })
   }
   candidates.sort(function(a, b) { return b.quickScore - a.quickScore })
-  candidates = candidates.slice(0, 80)
+  candidates = candidates.slice(0, 60)
   console.log("粗筛候选: " + candidates.length + " 只")
 
-  // 只对Top80获取K线
+  // === Phase2: 并行获取K线+腾讯补全+行业（省14秒）===
   var klineCodes = candidates.map(function(c) { return c.stock.code })
-  var klinesMap = {}
-  startTime = Date.now()
-  try {
-    klinesMap = await http.fetchKlinesConcurrent(klineCodes, 30)
-    console.log("K线获取: " + Object.keys(klinesMap).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
-  } catch(e) { console.warn("K线获取失败:", e.message) }
-
-  // 腾讯补全ROE等
-  var tencentData = {}
-  startTime = Date.now()
-  try {
-    tencentData = await http.fetchTencentBatch(klineCodes, 80)
-    console.log("腾讯补全: " + Object.keys(tencentData).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
-  } catch(e) { console.warn("腾讯补全失败:", e.message) }
-
-  // 批量获取行业板块
-  var industryMap = {}
-  startTime = Date.now()
-  try {
-    industryMap = await http.fetchIndustryBatch(klineCodes)
-    console.log("行业获取: " + Object.keys(industryMap).length + " 只, 耗时 " + (Date.now() - startTime) + "ms")
-  } catch(e) { console.warn("行业获取失败:", e.message) }
-
+  console.log("Phase2: 并行获取K线+腾讯+行业...")
+  var phase2Start = Date.now()
+  var phase2Results = await Promise.all([
+    http.fetchKlinesConcurrent(klineCodes, 20).catch(function(e) { console.warn("K线失败:", e.message); return {} }),
+    http.fetchTencentBatch(klineCodes, 60).catch(function(e) { console.warn("腾讯补全失败:", e.message); return {} }),
+    http.fetchIndustryBatch(klineCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} })
+  ])
+  var klinesMap = phase2Results[0]
+  var tencentData = phase2Results[1]
+  var industryMap = phase2Results[2]
+  console.log("Phase2完成, 耗时 " + (Date.now() - phase2Start) + "ms, K线=" + Object.keys(klinesMap).length + " 腾讯=" + Object.keys(tencentData).length + " 行业=" + Object.keys(industryMap).length)
   var now = new Date(Date.now() + 8 * 3600 * 1000)
   var isAfterHours = now.getHours() >= 15
   var results = []

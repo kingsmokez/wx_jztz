@@ -1,6 +1,6 @@
-/**
+﻿/**
  * 云函数统一调用封装
- * V2: 使用 wx.cloud.callFunction 的 timeout 选项，覆盖微信SDK默认3秒超时
+ * V3: 增加前端超时保护，在微信SDK超时前主动降级到缓存
  */
 
 function callFunction(name, action, data) {
@@ -48,29 +48,66 @@ function callFunctionWithTimeout(name, action, data, timeoutMs, fallback) {
 function callFunctionWithLoading(name, action, data) {
   if (!data) data = {}
   wx.showLoading({ title: '选股中...', mask: true })
-  return callFunction(name, action, data).then(function(result) {
-    wx.hideLoading()
-    return result
-  }).catch(function(err) {
-    wx.hideLoading()
-    if (action === 'run') {
-      console.warn('云函数 ' + name + '.run 失败，尝试读取缓存...')
-      return callFunction(name, 'list', {}).then(function(cached) {
-        if (cached && cached.data && cached.data.length > 0) {
-          var merged = Object.assign({}, cached, { fromCache: true })
-          wx.showToast({ title: '已显示缓存数据', icon: 'none', duration: 2000 })
-          return merged
+  // 前端30秒超时保护，在微信SDK超时前主动降级
+  var frontendTimeout = 30000
+  return new Promise(function(resolve) {
+    var done = false
+    var timer = setTimeout(function() {
+      if (!done) {
+        done = true
+        wx.hideLoading()
+        console.warn('云函数 ' + name + '.run 前端超时 ' + frontendTimeout + 'ms，降级到缓存')
+        // 尝试读取缓存
+        callFunction(name, 'list', {}).then(function(cached) {
+          if (cached && cached.data && cached.data.length > 0) {
+            wx.showToast({ title: '选股超时，已显示缓存', icon: 'none', duration: 2000 })
+            resolve(Object.assign({}, cached, { fromCache: true }))
+          } else {
+            wx.showToast({ title: '选股超时，请稍后重试', icon: 'none', duration: 2000 })
+            resolve({ success: true, data: [], cached: false, fromCache: false })
+          }
+        }).catch(function(e2) {
+          wx.showToast({ title: '选股超时，请稍后重试', icon: 'none', duration: 2000 })
+          resolve({ success: true, data: [], cached: false, fromCache: false })
+        })
+      }
+    }, frontendTimeout)
+
+    callFunction(name, action, data).then(function(result) {
+      if (!done) {
+        done = true
+        clearTimeout(timer)
+        wx.hideLoading()
+        resolve(result)
+      }
+    }).catch(function(err) {
+      if (!done) {
+        done = true
+        clearTimeout(timer)
+        wx.hideLoading()
+        if (action === 'run') {
+          console.warn('云函数 ' + name + '.run 失败，尝试读取缓存...')
+          callFunction(name, 'list', {}).then(function(cached) {
+            if (cached && cached.data && cached.data.length > 0) {
+              wx.showToast({ title: '已显示缓存数据', icon: 'none', duration: 2000 })
+              resolve(Object.assign({}, cached, { fromCache: true }))
+            } else {
+              var msg = (err && err.errMsg) || (err && err.message) || '网络异常'
+              var isTimeout = msg.indexOf('timeout') >= 0 || msg.indexOf('-504003') >= 0 || msg.indexOf('timed out') >= 0
+              wx.showToast({ title: isTimeout ? '选股超时，请稍后重试' : msg, icon: 'none', duration: 2000 })
+              resolve({ success: true, data: [], cached: false, fromCache: false })
+            }
+          }).catch(function(e2) {
+            wx.showToast({ title: '网络异常', icon: 'none', duration: 2000 })
+            resolve({ success: true, data: [], cached: false, fromCache: false })
+          })
+        } else {
+          var msg = (err && err.errMsg) || (err && err.message) || '网络异常'
+          wx.showToast({ title: msg, icon: 'none', duration: 2000 })
+          resolve({ success: true, data: [], cached: false })
         }
-        throw new Error('无缓存数据')
-      }).catch(function(e2) {
-        var msg = (err && err.errMsg) || (err && err.message) || '网络异常'
-        var isTimeout = msg.indexOf('timeout') >= 0 || msg.indexOf('-504003') >= 0 || msg.indexOf('timed out') >= 0
-        throw new Error(isTimeout ? '选股超时，请稍后重试' : msg)
-      })
-    }
-    var msg = (err && err.errMsg) || (err && err.message) || '网络异常'
-    var isTimeout = msg.indexOf('timeout') >= 0 || msg.indexOf('-504003') >= 0 || msg.indexOf('timed out') >= 0
-    throw new Error(isTimeout ? '选股超时，请稍后重试' : msg)
+      }
+    })
   })
 }
 
