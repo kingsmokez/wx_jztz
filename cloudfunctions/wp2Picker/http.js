@@ -881,7 +881,22 @@ var INDUSTRY_MAP = [
   ["信息","计算机-IT服务"],
   ["科技","计算机-IT服务"],
   ["数据","计算机-IT服务"],
-  ["智能","计算机-IT服务"]
+  ["智能","计算机-IT服务"],
+  // === 更多名称关键词补充（解决"综合"行业问题）===
+  ["国光","农林牧渔-农化制品"],["热力","公用事业-热力"],["热电","公用事业-火电"],
+  ["世茂","公用事业-热力"],["联产","公用事业-火电"],["供热","公用事业-热力"],
+  ["农药","农林牧渔-农化制品"],["化肥","基础化工-化肥农药"],["植保","农林牧渔-农化制品"],
+  ["植物","农林牧渔-农化制品"],["调节剂","农林牧渔-农化制品"],
+  ["煤电","公用事业-火电"],["火电","公用事业-火电"],["发电","公用事业-电力"],
+  ["电力","公用事业-电力"],["电","公用事业-电力"],
+  ["水务","环保-水务"],["环保","环保-环境治理"],
+  ["新材料","基础化工-化学制品"],["材料","基础化工-化学制品"],
+  ["光电","电子-光学光电子"],["光","电子-光学光电子"],
+  ["通信","通信-通信设备"],["通讯","通信-通信设备"],
+  ["互联网","计算机-互联网服务"],["网络","计算机-互联网服务"],
+  ["传媒","传媒-传媒"],["影视","传媒-影视"],["广告","传媒-营销传播"],
+  ["租赁","非银金融-租赁"],["信托","非银金融-信托"],
+  ["期货","非银金融-期货"],["基金","非银银金融-基金"]
 ]
 
 // ===== 批量获取行业板块（东财datacenter API）=====
@@ -917,7 +932,7 @@ async function fetchIndustryBatch(codes) {
           var item = data.result.data[i]
           var code = String(item.SECURITY_CODE || "")
           var boardName = String(item.BOARD_NAME || "")
-          if (code && boardName && !seen[code] && boardName !== "综合") {
+          if (code && boardName && !seen[code]) {
             boardName = boardName.replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+$/g, "")
             result[code] = boardName
             seen[code] = true
@@ -949,7 +964,7 @@ async function fetchIndustryBatch(codes) {
         var data = JSON.parse(text)
         if (data.result && data.result.data && data.result.data.length > 0) {
           var boardName = String(data.result.data[0].BOARD_NAME || "")
-          if (boardName && boardName !== "综合") {
+          if (boardName) {
             boardName = boardName.replace(/[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+$/g, "")
             result[code] = boardName
           }
@@ -1007,7 +1022,18 @@ async function fetchIndustryBatch(codes) {
 }
 function guessIndustry(name, code, emIndustry, apiIndustry) {
   // === 优先级1：API实时获取的行业（东财datacenter申万行业）===
-  if (apiIndustry && apiIndustry !== "" && apiIndustry !== "综合" && apiIndustry !== "-") {
+  if (apiIndustry && apiIndustry !== "" && apiIndustry !== "-") {
+    if (apiIndustry === "综合") {
+      // "综合"太笼统，先尝试名称关键词匹配获取更精确的行业
+      if (name) {
+        var n0 = String(name)
+        for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+          if (n0.indexOf(INDUSTRY_MAP[i][0]) >= 0 && INDUSTRY_MAP[i][1] !== "综合-综合") return INDUSTRY_MAP[i][1]
+        }
+      }
+      // 名称匹配不到，返回"综合-综合"
+      return "综合-综合"
+    }
     // 先精确匹配apiIndustry本身
     for (var i = 0; i < INDUSTRY_MAP.length; i++) {
       if (INDUSTRY_MAP[i][0] === apiIndustry) return INDUSTRY_MAP[i][1]
@@ -1022,7 +1048,17 @@ function guessIndustry(name, code, emIndustry, apiIndustry) {
   }
 
   // === 优先级2：东财行情返回的行业（f100字段）===
-  if (emIndustry && emIndustry !== "" && emIndustry !== "综合" && emIndustry !== "-") {
+  if (emIndustry && emIndustry !== "" && emIndustry !== "-") {
+    if (emIndustry === "综合") {
+      // "综合"太笼统，先尝试名称关键词匹配
+      if (name) {
+        var n0b = String(name)
+        for (var i = 0; i < INDUSTRY_MAP.length; i++) {
+          if (n0b.indexOf(INDUSTRY_MAP[i][0]) >= 0 && INDUSTRY_MAP[i][1] !== "综合-综合") return INDUSTRY_MAP[i][1]
+        }
+      }
+      return "综合-综合"
+    }
     // 已经是"大类-小类"格式直接返回
     if (emIndustry.indexOf("-") >= 0) return emIndustry
     // 先精确匹配
@@ -1105,33 +1141,52 @@ async function fetchSinaAllStocks() {
   console.log("新浪降级行情: " + Object.keys(allStocks).length + " 只")
   return allStocks
 }
-// ===== 沪深300大盘数据 =====
+// ===== 沪深300大盘数据（双源）=====
 async function fetchHS300() {
+  // 源1: 新浪行情
   try {
     var text = await request("https://hq.sinajs.cn/list=sh000300", {
       timeout: 3000,
       headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/" }
     })
     var m = text.match(/"([^"]+)"/)
-    if (!m) return null
-    var ps = m[1].split(",")
-    if (ps.length < 5) return null
-    var pc = parseFloat(ps[2]) || 0
-    var cur = parseFloat(ps[3]) || 0
-    if (pc <= 0) return null
-    var cp = Math.round((cur - pc) / pc * 10000) / 100
-    var st = "震荡"
-    if (cp > 2) st = "大涨"
-    else if (cp > 0.5) st = "上涨"
-    else if (cp > -0.5) st = "震荡"
-    else if (cp > -2) st = "下跌"
-    else st = "大跌"
-    return { status: st, changePct: cp, current: cur, prevClose: pc }
-  } catch(e) { return null }
+    if (m) {
+      var ps = m[1].split(",")
+      if (ps.length >= 5) {
+        var pc = parseFloat(ps[2]) || 0
+        var cur = parseFloat(ps[3]) || 0
+        if (pc > 0 && cur > 0) {
+          var cp = Math.round((cur - pc) / pc * 10000) / 100
+          var st = cp > 2 ? "大涨" : cp > 0.5 ? "上涨" : cp > -0.5 ? "震荡" : cp > -2 ? "下跌" : "大跌"
+          console.log("[沪深300-新浪] " + st + " " + cp + "%")
+          return { status: st, changePct: cp, current: cur, prevClose: pc }
+        }
+      }
+    }
+  } catch(e) { console.warn("[沪深300-新浪] 失败:", e.message) }
+
+  // 源2: 东财指数行情
+  try {
+    var text = await request("https://push2.eastmoney.com/api/qt/stock/get?secid=1.000300&fields=f43,f44,f45,f46,f47,f170", {
+      timeout: 3000,
+      headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" }
+    })
+    var data = JSON.parse(text)
+    if (data && data.data) {
+      var cur = (data.data.f43 || 0) / 100
+      var pc = (data.data.f46 || 0) / 100
+      var cp = (data.data.f170 || 0) / 100
+      if (cur > 0) {
+        var st = cp > 2 ? "大涨" : cp > 0.5 ? "上涨" : cp > -0.5 ? "震荡" : cp > -2 ? "下跌" : "大跌"
+        console.log("[沪深300-东财] " + st + " " + cp + "%")
+        return { status: st, changePct: cp, current: cur, prevClose: pc }
+      }
+    }
+  } catch(e) { console.warn("[沪深300-东财] 失败:", e.message) }
+
+  console.warn("[沪深300] 所有源失败")
+  return null
 }
-// ===== 多源自动切换：获取涨幅榜股票 =====
-// 源1: 东财push2 → 源2: 新浪涨幅榜+腾讯详情 → 源3: 腾讯热门批量
-// 任一源获取到数据就返回，自动降级
 
 async function fetchStockList(sortField, topN) {
   if (!topN) topN = 200
