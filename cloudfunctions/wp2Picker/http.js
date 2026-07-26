@@ -248,6 +248,45 @@ async function fetchTencentBatch(codes, batchSize) {
   return results
 }
 
+// ===== 东财财务数据备用（补充ROE/毛利率/负债率）=====
+async function fetchFinancialBatch(codes) {
+  if (!codes || codes.length === 0) return {}
+  var result = {}
+  var batchSize = 30
+  for (var b = 0; b < codes.length; b += batchSize) {
+    var batch = codes.slice(b, b + batchSize)
+    try {
+      var codeList = batch.map(function(c) { return '"' + c + '"' }).join(',')
+      var url = 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD' +
+        '&columns=SECURITY_CODE,NEWEST_ROE,GROSS_PROFIT_RATIO,DEBT_ASSET_RATIO' +
+        '&filter=(SECURITY_CODE%20in%20(' + encodeURIComponent(codeList) + '))' +
+        '&pageSize=200&source=WEB&client=WEB'
+      var text = await request(url, {
+        timeout: 5000,
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://data.eastmoney.com/' }
+      })
+      var data = JSON.parse(text)
+      if (data.result && data.result.data && data.result.data.length > 0) {
+        for (var i = 0; i < data.result.data.length; i++) {
+          var item = data.result.data[i]
+          var code = String(item.SECURITY_CODE || '')
+          if (code) {
+            result[code] = {
+              roe: parseFloat(item.NEWEST_ROE) || 0,
+              grossMargin: parseFloat(item.GROSS_PROFIT_RATIO) || 0,
+              debtRatio: parseFloat(item.DEBT_ASSET_RATIO) || 0
+            }
+          }
+        }
+      }
+    } catch(e) {
+      console.warn('[财务备用] 第' + Math.floor(b / batchSize + 1) + '批失败:', e.message)
+    }
+  }
+  console.log('[财务备用] 获取 ' + Object.keys(result).length + '/' + codes.length + ' 只财务数据')
+  return result
+}
+
 // ===== V31新增: ATR =====
 function calcATR(klines, period) {
   if (!klines || klines.length < period + 1) return 0
@@ -1401,6 +1440,7 @@ module.exports = {
   fetchEMRank: fetchEMRank,
   fetchKlinesConcurrent: fetchKlinesConcurrent,
   fetchTencentBatch: fetchTencentBatch,
+  fetchFinancialBatch: fetchFinancialBatch,
   fetchSectorMap: fetchSectorMap,
   fetchSinaAllStocks: fetchSinaAllStocks,
   calcRSI: calcRSI,

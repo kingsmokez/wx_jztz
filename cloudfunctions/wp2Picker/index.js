@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 尾盘强势股选股 V7 - 优化版，解决超时
  * 优化：涨幅榜Top200+量比榜Top200合并，先粗评分取Top80再获取K线
  */
@@ -140,13 +140,13 @@ async function runWp2Picker(topN, force) {
   var phase2Results = await Promise.all([
     http.fetchKlinesConcurrent(klineCodes, 20).catch(function(e) { console.warn("K线失败:", e.message); return {} }),
     http.fetchTencentBatch(klineCodes, 60).catch(function(e) { console.warn("腾讯补全失败:", e.message); return {} }),
-    http.fetchIndustryBatch(klineCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} })
+    http.fetchIndustryBatch(klineCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} }),
+    http.fetchFinancialBatch(klineCodes).catch(function(e) { console.warn("财务备用失败:", e.message); return {} })
   ])
   var klinesMap = phase2Results[0]
   var tencentData = phase2Results[1]
   var industryMap = phase2Results[2]
-  console.log("Phase2完成, 耗时 " + (Date.now() - phase2Start) + "ms, K线=" + Object.keys(klinesMap).length + " 腾讯=" + Object.keys(tencentData).length + " 行业=" + Object.keys(industryMap).length)
-
+  var financialData = phase2Results[3]
 
   var results = []
   for (var i = 0; i < candidates.length; i++) {
@@ -161,6 +161,13 @@ async function runWp2Picker(topN, force) {
       if (td.pe && td.pe > 0) stock.pe = td.pe
       if (td.pb && td.pb > 0) stock.pb = td.pb
       if (td.circCap && td.circCap > 0) stock.circCap = td.circCap
+    }
+    // 东财财务备用补充ROE/毛利率/负债率
+    var fd = financialData[stock.code]
+    if (fd) {
+      if (!stock.roe && fd.roe) stock.roe = fd.roe
+      if (!stock.grossMargin && fd.grossMargin) stock.grossMargin = fd.grossMargin
+      if (!stock.debtRatio && fd.debtRatio) stock.debtRatio = fd.debtRatio
     }
 
     var klines = klinesMap[stock.code]

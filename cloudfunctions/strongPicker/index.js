@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 短线强势股选股 V73 - boll_squeeze+RSI未超买+ADX强趋势确认
  * 回测2年: WR=90.20% AR=3.08% n=51 (V70: WR=82.74% AR=2.06% n=168)
  * 核心形态: 布林收窄突破(boll_squeeze) + 涨幅1-2.5% + 量比>=1.8 + RSI<=60
@@ -388,14 +388,14 @@ async function runStrongPicker(topN, force) {
   var phase2Results = await Promise.all([
     http.fetchKlinesConcurrent(klineCodes, 20).catch(function(e) { console.warn("K线失败:", e.message); return {} }),
     http.fetchTencentBatch(klineCodes, 60).catch(function(e) { console.warn("腾讯补全失败:", e.message); return {} }),
-    http.fetchIndustryBatch(klineCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} })
+    http.fetchIndustryBatch(klineCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} }),
+    http.fetchFinancialBatch(klineCodes).catch(function(e) { console.warn("财务备用失败:", e.message); return {} })
   ])
   var klinesMap = phase2Results[0]
   var tencentData = phase2Results[1]
   var industryMap = phase2Results[2]
-  console.log("Phase2完成, 耗时 " + (Date.now() - phase2Start) + "ms, K线=" + Object.keys(klinesMap).length + " 腾讯=" + Object.keys(tencentData).length + " 行业=" + Object.keys(industryMap).length)
-  var now = new Date(Date.now() + 8 * 3600 * 1000)
-  var isAfterHours = now.getHours() >= 15
+  var financialData = phase2Results[3]
+  console.log("Phase2完成, 耗时 " + (Date.now() - phase2Start) + "ms, K线=" + Object.keys(klinesMap).length + " 腾讯=" + Object.keys(tencentData).length + " 行业=" + Object.keys(industryMap).length + " 财务=" + Object.keys(financialData).length)
   var results = []
 
   for (var i = 0; i < candidates.length; i++) {
@@ -411,6 +411,13 @@ async function runStrongPicker(topN, force) {
       if (td.pe && td.pe > 0) stock.pe = td.pe
       if (td.pb && td.pb > 0) stock.pb = td.pb
       if (td.circCap && td.circCap > 0) stock.circCap = td.circCap
+    }
+    // 东财财务备用补充ROE/毛利率/负债率
+    var fd = financialData[stock.code]
+    if (fd) {
+      if (!stock.roe && fd.roe) stock.roe = fd.roe
+      if (!stock.grossMargin && fd.grossMargin) stock.grossMargin = fd.grossMargin
+      if (!stock.debtRatio && fd.debtRatio) stock.debtRatio = fd.debtRatio
     }
 
     var klines = klinesMap[stock.code]

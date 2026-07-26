@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 早盘集合竞价选股 V6 - 对齐原版 auction_picker.py
  * 两阶段评分: Phase1趋势/量能/位置 + Phase2跳空/量比/竞价金额/大盘
  * 信号: 跳空高开/温和放量/趋势向好/确认信号/换手率激活
@@ -195,11 +195,12 @@ async function runAuctionPicker(topN, force) {
   var phase2Start = Date.now()
   var phase2Results = await Promise.all([
     http.fetchTencentBatch(candidateCodes.slice(0, Math.min(candidateCodes.length, 300)), 80).catch(function(e) { console.warn("腾讯补全失败:", e.message); return {} }),
-    http.fetchIndustryBatch(candidateCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} })
+    http.fetchIndustryBatch(candidateCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} }),
+    http.fetchFinancialBatch(candidateCodes).catch(function(e) { console.warn("财务备用失败:", e.message); return {} })
   ])
   var tencentData = phase2Results[0]
   var industryMap = phase2Results[1]
-  console.log("Phase2完成, 耗时 " + (Date.now() - phase2Start) + "ms, 腾讯=" + Object.keys(tencentData).length + " 行业=" + Object.keys(industryMap).length)
+  var financialData = phase2Results[2]
 
   // 补全财务数据
   for (var ti = 0; ti < candidates.length; ti++) {
@@ -214,6 +215,13 @@ async function runAuctionPicker(topN, force) {
       if (td.pe && td.pe > 0) tc.pe = td.pe
       if (td.pb && td.pb > 0) tc.pb = td.pb
       if (td.circCap && td.circCap > 0) tc.circCap = td.circCap
+      // 东财财务备用补充
+      var fd = financialData[tc.code]
+      if (fd) {
+        if (!tc.roe && fd.roe) tc.roe = fd.roe
+        if (!tc.grossMargin && fd.grossMargin) tc.grossMargin = fd.grossMargin
+        if (!tc.debtRatio && fd.debtRatio) tc.debtRatio = fd.debtRatio
+      }
     }
   }
 var results = []
