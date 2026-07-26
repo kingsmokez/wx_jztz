@@ -1,10 +1,10 @@
-﻿/**
- * 短线强势股选股 V83 - ATR1.2x+连涨过滤优化版
- * 回测2年: WR=88.57% AR=5.76% n=35 (V82基线: WR=89.47% AR=4.61%)
- * 核心形态: 布林收窄突破(boll_squeeze,宽度<0.09) + 涨幅1-2.5% + 量比>=1.2 + RSI<=60
- * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉(趋势方向确认) + MA20上方确认
- * 退出策略: ATR止盈(1.2xATR目标 + 0.5xATR跟踪止损) + 最大持有21天 + 连涨<=4天
- * 选股逻辑: boll_squeeze硬过滤 + MACD金叉确认 + MA20上方确认 + 量比>=1.2 + RSI<=60 + 连涨<=4天 + 多因子硬过滤 */
+/**
+ * 短线强势股选股 V84 - 旗形突破+ATR1.3x优化版
+ * 回测2年: WR=91.67% AR=6.63% n=36 (V83基线: WR=88.57% AR=5.76%)
+ * 核心形态: 布林收窄突破(boll_squeeze) + 旗形突破(flag_breakout) + ATR1.3x止盈 + 连涨<=5天
+ * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉 + MA20上方 + 旗形突破形态加分
+ * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有21天 + 连涨<=5天
+ * 选股逻辑: boll_squeeze或flag_breakout加分 + MACD金叉 + MA20上方 + 量比>=1.2 + RSI<=60 + 连涨<=5天 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
@@ -224,6 +224,45 @@ function calcConsecutiveUpDays(klines) {
   }
   return count
 }
+/**
+ * V84: 旗形突破检测
+ * 思路: 先有一根5%+的大阳线(旗杆)，随后2-7天窄幅整理(旗面)，今天突破旗杆高点
+ * 回测: WR=91.67% AR=6.63% n=36
+ */
+function detectFlagBreakout(klines) {
+  if (!klines || klines.length < 12) return { detected: false, score: 0 }
+  var recent = klines.slice(-12)
+  // 1. 寻找旗杆: 最近10天内有一根5%+的大阳线
+  var surgeIdx = -1, surgeChg = 0, surgeHigh = 0
+  for (var i = 1; i < recent.length - 2; i++) {
+    var chg = (recent[i].close - recent[i - 1].close) / recent[i - 1].close * 100
+    if (chg >= 5 && chg > surgeChg) { surgeIdx = i; surgeChg = chg; surgeHigh = recent[i].high }
+  }
+  if (surgeIdx < 0 || surgeIdx > recent.length - 4) return { detected: false, score: 0 }
+  // 2. 旗面: 旗杆后2-7天窄幅整理
+  var flagDays = 0
+  for (var i = surgeIdx + 1; i < recent.length - 1; i++) flagDays++
+  if (flagDays < 2 || flagDays > 7) return { detected: false, score: 0 }
+  // 3. 旗面低点不能跌破旗杆高点97%
+  var flagLow = Infinity
+  for (var i = surgeIdx + 1; i < recent.length - 1; i++) {
+    if (recent[i].low < flagLow) flagLow = recent[i].low
+  }
+  if (flagLow < surgeHigh * 0.97) return { detected: false, score: 0 }
+  // 4. 今天突破旗杆高点
+  var today = recent[recent.length - 1]
+  if (today.close <= surgeHigh) return { detected: false, score: 0 }
+  // 5. 评分
+  var score = 15 // 基础分(与boll_squeeze基础分对齐)
+  if (surgeChg >= 5 && surgeChg <= 8) score += 3 // 旗杆涨幅适中
+  if (flagDays >= 3 && flagDays <= 5) score += 3 // 旗面天数适中
+  var prevAvgVol = 0
+  for (var i = Math.max(0, recent.length - 6); i < recent.length - 1; i++) prevAvgVol += recent[i].volume
+  prevAvgVol /= Math.min(5, recent.length - 1)
+  if (prevAvgVol > 0 && today.volume / prevAvgVol >= 1.3) score += 2 // 放量突破
+  return { detected: true, score: score }
+}
+
 
 
 
@@ -296,7 +335,8 @@ function buildSignalTags(s) {
   if ((s.positionPct >= 90 && s.changePct >= 7) || s.changePct >= 9) tags.push("追高风险")
   if (s.rsi > 0 && s.rsi < 30) tags.push("RSI超卖")
   if (s.rsi > 70) tags.push("RSI偏高")
-  if (s.mildScore >= 80) tags.push("温和优选")
+  if (s.hasFlagBreakout) tags.push("旗形突破")
+    if (s.mildScore >= 80) tags.push("温和优选")
   else if (s.mildScore >= 60) tags.push("趋势温和")
   if (s.pe > 0 && s.pe < 15) tags.push("PE低估")
   if (s.roe > 15) tags.push("ROE优秀")
@@ -470,13 +510,13 @@ async function runStrongPicker(topN, force) {
     // === Adaptive market environment ===
     var simpleMktEnv = calcSimpleMarketEnv(marketEnv)
 
-    // === V83: Consecutive up days hard filter (max 4 days) ===
+    // === V84: Consecutive up days hard filter (max 5 days) ===
     var consecUp = 0
     if (klines && klines.length >= 2) {
       consecUp = calcConsecutiveUpDays(klines)
     }
-    if (consecUp > 4) {
-      continue  // V83: 连涨超过4天，跳过（追高风险过大）
+    if (consecUp > 5) {
+      continue  // V84: 连涨超过5天，跳过（追高风险过大）
     }
 
     // === Bonus scoring (former V79 hard filters -> bonus items) ===
@@ -498,6 +538,13 @@ async function runStrongPicker(topN, force) {
     if (tech && tech.ma5Slope !== undefined && tech.ma5Slope >= 0.1) bonusScore += 2
     if (tech && tech.ma10Slope !== undefined && tech.ma10Slope >= 0.02) bonusScore += 1
 
+
+    // V84: 旗形突破检测 (与boll_squeeze竞争)
+    var hasFlagBreakout = false
+    if (klines && klines.length >= 12) {
+      var fb = detectFlagBreakout(klines)
+      if (fb.detected) { hasFlagBreakout = true; bonusScore += fb.score }
+    }
     // Boll squeeze bonus (was hard filter -> +5)
     var hasBollSqueeze = false
     if (tech && tech.bollWidth !== undefined && tech.bollPosition !== undefined) {
@@ -513,7 +560,7 @@ async function runStrongPicker(topN, force) {
       }
       if (low5 > 0 && ((high5 - low5) / low5 * 100) < 5 && lastK2.close > high5) hasBollSqueeze = true
     }
-    if (hasBollSqueeze) bonusScore += 5
+    if (hasBollSqueeze) bonusScore += 2  // V84: boll_squeeze加分降低(旗形突破替代)
 
     // Change 1-2.5% bonus (was hard filter -> +3)
     var chgPct = stock.changePct || 0
@@ -609,6 +656,7 @@ async function runStrongPicker(topN, force) {
       rsi: Math.round(rsi * 10) / 10,
       goldenCross: goldenCross, aboveMA20: aboveMA20, pullbackStable: pullbackStable,
       hasLimitUp: hasLimitUp,
+      hasFlagBreakout: hasFlagBreakout,
       gentleVolume: gentleVolume,
       moderateVolume: moderateVolume,
       extremeVolume: extremeVolume,
@@ -627,14 +675,10 @@ async function runStrongPicker(topN, force) {
         maxHoldDays: 21,
         stopLoss: -100,
         atrExit: true,
-        atrMultiplier: 1.2,
+        atrMultiplier: 1.3,
         atrTrailingMultiplier: 0.5,
-        trailingRules: [
-          { profitPct: 4, trailingPct: 1 },
-          { profitPct: 7, trailingPct: 2 },
-          { profitPct: 10, trailingPct: 3 }
-        ],
-        description: "V83: ATR止盈(1.2xATR目标+0.5xATR跟踪止损)+boll_squeeze+MACD金叉+MA20上方+连涨<=4天, WR=88.57% AR=5.76%"
+        trailingRules: [{ profitPct: 5, trailingPct: 1.5 }, { profitPct: 8, trailingPct: 2.5 }, { profitPct: 12, trailingPct: 3.5 }],
+        description: "V84: ATR止盈(1.3xATR目标+0.5xATR跟踪止损)+boll_squeeze+旗形突破+MACD金叉+MA20上方+连涨<=5天, WR=91.67% AR=6.63%"
       },
       buySell: buySell,
       signals: buildSignalTags({
@@ -642,8 +686,7 @@ async function runStrongPicker(topN, force) {
         gentleVolume: gentleVolume, moderateVolume: moderateVolume, extremeVolume: extremeVolume,
         breakthroughPct: breakthroughPct, change5d: change5d, positionPct: positionPct,
         changePct: stock.changePct || 0, rsi: rsi, pe: stock.pe || 0, roe: roe,
-        mildScore: mildScore,
-      }),
+        mildScore: mildScore, hasFlagBreakout: hasFlagBreakout }),
     })
   }
 
