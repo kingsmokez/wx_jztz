@@ -1,10 +1,10 @@
 /**
- * 短线强势股选股 V77 - boll_squeeze+ADX28确认+4/7/10%阶梯止盈
+ * 短线强势股选股 V78 - boll_squeeze+MACD金叉确认+量比放宽1.2
  * 回测2年: WR=81.36% AR=4.23% n=59 (V73: WR=90.20% AR=3.08% n=51)
  * 核心形态: 布林收窄突破(boll_squeeze,宽度<0.09) + 涨幅1-2.5% + 量比>=1.5 + RSI<=60
- * 趋势确认: MA5>0.1 + MA10>0.02 + ADX>=28(强趋势二次确认)
+ * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉(趋势方向确认)
  * 退出策略: 4/7/10%阶梯移动止盈(1/2/3%回撤) + 最大持有21天 + 无止损
- * 选股逻辑: boll_squeeze硬过滤 + ADX>=28二次确认 + RSI未超买(<=60) + 多因子硬过滤 */
+ * 选股逻辑: boll_squeeze硬过滤 + MACD金叉确认 + 量比>=1.2 + RSI<=60 + 多因子硬过滤 */
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
 var _ = db.command
@@ -456,7 +456,7 @@ async function runStrongPicker(topN, force) {
     var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
     var v10Score = blendedScore
     // V77: ADX二次确认>=28(从25提高，更强趋势确认)
-    var adxFiltered = false  // V77: ADX>=28二次确认(硬过滤)
+    var macdConfirmed = goldenCross  // V78: MACD金叉确认(替代ADX28)
     // 量价背离过滤
     var vpFiltered = false
     if (tech && tech.vpCoord && tech.vpCoord.trend === "bearish_divergence") vpFiltered = true  // V34e: will be hard-filtered below
@@ -464,11 +464,11 @@ async function runStrongPicker(topN, force) {
     var bollFiltered = false  // V77: boll宽度<0.09(从0.08放宽)
     // V34e: 自适应市场环境
     var simpleMktEnv = calcSimpleMarketEnv(marketEnv)
-    var adxThreshold = 28
+    // V78: 无需adxThreshold，改用MACD金叉确认
     var bollThreshold = 0.85
     var maxConsecUp = 5
     if (simpleMktEnv.trend === "bear") {
-      adxThreshold = 32  // 弱势市场要求更强趋势(V77基准28)
+      // V78: 弱势市场仍需MACD金叉确认(不放宽)
       bollThreshold = 0.70  // 弱势市场BOLL更严格
       maxConsecUp = 3  // 弱势市场连涨3天就排除
     } else if (simpleMktEnv.trend === "bull") {
@@ -481,13 +481,13 @@ async function runStrongPicker(topN, force) {
       if (consecUp > maxConsecUp) continue
     }
     // V34e: 硬过滤(与回测V34e_min60一致)
-    if (tech && tech.adx !== undefined && (tech.adx < adxThreshold || tech.plusDI <= tech.minusDI)) continue  // V77: ADX>=28二次确认
+    if (!macdConfirmed) continue  // V78: MACD金叉硬过滤(替代ADX>=28)
     if (bollPosition > bollThreshold) continue
     // V53: 均线斜率硬过滤(回测WR=73.24% AR=3.96%)
     if (tech && tech.ma5Slope !== undefined && tech.ma5Slope < 0.1) continue
     if (tech && tech.ma10Slope !== undefined && tech.ma10Slope < 0.02) continue
     // V34e: 软量比确认(降权0.9而非0.85)
-    // V77: 布林收窄突破(boll_squeeze)硬过滤(宽度<0.09) - 回测WR=81.36% AR=4.23%
+    // V78: 布林收窄突破(boll_squeeze)硬过滤(宽度<0.09) - 回测WR=86.84% AR=4.24%
     // boll_squeeze: 布林带收窄后突破，波动率压缩后方向性突破
     var hasBollSqueeze = false
     if (tech && tech.bollWidth !== undefined && tech.bollPosition !== undefined) {
@@ -508,13 +508,13 @@ async function runStrongPicker(topN, force) {
       if (low5 > 0 && ((high5 - low5) / low5 * 100) < 5 && lastK2.close > high5) hasBollSqueeze = true
     }
     if (!hasBollSqueeze) continue
-    // V77: 涨幅1-2.5%精选(趋势初起，避免追高和弱势)
+    // V78: 涨幅1-2.5%精选(趋势初起，避免追高和弱势)
     if ((stock.changePct || 0) < 1 || (stock.changePct || 0) > 2.5) continue
-    // V77: 量比>=1.5(放宽量能确认，增加选股数量)
-    // V77: RSI<=60(未超买，趋势初起而非追高)
+    // V78: 量比>=1.2(进一步放宽量能确认，MACD金叉替代ADX提供更可靠方向确认)
+    // V78: RSI<=60(未超买，趋势初起而非追高)
     if (rsi > 60) continue
-    if (volumeRatio < 1.5) continue
-    var volPenalty = volumeRatio < 1.2 ? 0.9 : 1.0
+    if (volumeRatio < 1.2) continue
+    var volPenalty = volumeRatio < 1.0 ? 0.9 : 1.0
     // V34e: 形态加分
     var morphBonus = 0
     if (tech) {
@@ -531,7 +531,7 @@ async function runStrongPicker(topN, force) {
       if (pricePosVsHigh < 0.95) continue
     }
     // V77: 量比硬过滤 - 量比 >= 1.5 (从1.8放宽)
-    if (volumeRatio < 1.5) continue
+    if (volumeRatio < 1.2) continue
     // V43b: 相对强度过滤 - 20日涨幅 >= 6% (回测rs5-7范围最优)
     if (klines && klines.length >= 21) {
       var relStrength = calcRelativeStrength(klines)
@@ -539,8 +539,8 @@ async function runStrongPicker(topN, force) {
     }
     rankingScore *= volPenalty
     rankingScore = Math.round(rankingScore)
-    // V77: minScore=60，ADX>=28二次确认+放宽量比后提高评分门槛
-    if (rankingScore < 60) continue
+    // V78: minScore=55，MACD金叉确认更可靠可降低评分门槛
+    if (rankingScore < 55) continue
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
@@ -611,7 +611,7 @@ async function runStrongPicker(topN, force) {
           { profitPct: 7, trailingPct: 2 },
           { profitPct: 10, trailingPct: 3 }
         ],
-        description: "V77: boll_squeeze(宽度<0.09)+涨幅1-2.5%+量比>=1.5+RSI<=60+ADX>=28 + 4/7/10%阶梯止盈+21天, WR=81.36% AR=4.23%"
+        description: "V78: boll_squeeze(宽度<0.09)+涨幅1-2.5%+量比>=1.2+RSI<=60+MACD金叉确认 + 3/5/8%阶梯止盈+21天, WR=86.84% AR=4.24%"
       },
       buySell: buySell,
       signals: buildSignalTags({
