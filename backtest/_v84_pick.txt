@@ -1,0 +1,150 @@
+    var price = klines[idx].close
+    var high = klines[idx].high
+    if (high > highestPrice) highestPrice = high
+    var returnPct = (price - buyPrice) / buyPrice * 100
+    var maxRet = (highestPrice - buyPrice) / buyPrice * 100
+    if (maxRet > maxReturn) maxReturn = maxRet
+    
+    // 动态ATR倍数: 前3天1.5x, 3-7天1.2x, 7天后0.8x
+    var curMult = atrMult
+    if (d <= 3) curMult = atrMult * 1.25
+    else if (d <= 7) curMult = atrMult
+    else curMult = atrMult * 0.67
+    
+    var atrProfit = atrVal * curMult / buyPrice * 100
+    var atrTrailing = atrVal * atrTrailMult / buyPrice * 100
+    
+    // ATR止盈检查
+    if (maxRet >= atrProfit) {
+      // 达到目标, 用跟踪止损
+      var drawdown = maxRet - returnPct
+      if (drawdown >= atrTrailing) { exitPrice = price; exitDay = d; exitReason = 'atr_trailing'; break }
+    }
+    exitPrice = price; exitDay = d
+  }
+  var finalReturn = (exitPrice - buyPrice) / buyPrice * 100
+  return { exitPrice: exitPrice, exitDay: exitDay, finalReturn: finalReturn, exitReason: exitReason, maxReturn: maxReturn }
+}
+
+// ===== V84模拟选股(扩展V82) =====
+function simulatePickV84(dayQuotes, klineMap, dateIdxMap, topN, marketEnv, strategy) {
+  var params = V43B_PARAMS
+  var minScore = strategy.minScore || 55
+  var scored = []
+  var adxThreshold = 20, bollThreshold = 0.85, maxConsecUp = strategy.maxConsecUp || 5
+  if (params.adaptiveMarket && marketEnv) {
+    if (marketEnv.trend === "bear") {
+      adxThreshold = Math.max(20, adxThreshold + 8)
+      bollThreshold = Math.max(0.70, bollThreshold - 0.15)
+      if (params.dynamicConsec) maxConsecUp = params.consecBear || 3
+    } else if (marketEnv.trend === "bull") {
+      bollThreshold = Math.min(0.92, bollThreshold + 0.05)
+      if (params.dynamicConsec) maxConsecUp = params.consecBull || 6
+    }
+  }
+  if (strategy.maxConsecUp) maxConsecUp = strategy.maxConsecUp
+
+  for (var i = 0; i < dayQuotes.length; i++) {
+    var stock = dayQuotes[i]
+    if (!preFilter(stock)) continue
+    var code = stock.code
+    var klines = klineMap[code]
+    var dateIdx = dateIdxMap[code]
+    if (!klines || dateIdx === undefined || dateIdx < 20) continue
+
+    var volumeRatio = stock.volumeRatio || 0
+    if (volumeRatio <= 0) volumeRatio = calcVolumeRatioFromKlines(klines, dateIdx)
+    if (volumeRatio <= 0) continue
+
+    var techSlice = klines.slice(0, dateIdx + 1)
+    var tech = calcTechFromKlines(techSlice)
+    if (!tech) continue
+
+    if (strategy.ma5Min !== undefined && tech.ma5Slope < strategy.ma5Min) continue
+    if (strategy.ma10Min !== undefined && tech.ma10Slope < strategy.ma10Min) continue
+    var rs = calcRelativeStrength(klines, dateIdx)
+    if (strategy.rsMin && rs < strategy.rsMin) continue
+    if (strategy.vrMin && volumeRatio < strategy.vrMin) continue
+    if (strategy.rsiMax && tech.rsi > strategy.rsiMax) continue
+    if (strategy.adxMin && tech.adx < strategy.adxMin) continue
+    if (strategy.chgMax && stock.changePct > strategy.chgMax) continue
+    if (strategy.chgMin && stock.changePct < strategy.chgMin) continue
+
+    var pricePos = calcPricePositionVsHigh(klines, dateIdx)
+    var ppThreshold = strategy.pricePosThreshold || 0.95
+    if (pricePos > ppThreshold) continue
+    if (volumeRatio < (strategy.vrMin || 1.5)) continue
+
+    var v31Score = calcTechScoreV31(stock, tech.rsi, tech.goldenCross, volumeRatio, tech.bollPosition, code, tech.maSignal, tech.change5d || 0)
+    var v10Score = calcTechScoreV10(stock, tech.rsi, tech.goldenCross, volumeRatio, tech.bollPosition, code, tech.maSignal, tech.change5d || 0)
+    var v31W = strategy.v31W || 0.75
+    var v10W = strategy.v10W || 0.25
+    var techScore = v31Score * v31W + v10Score * v10W
+
+    // 形态评分
+    var patternResult
+    var patternMode = strategy.patternMode || 'v81'
+    if (patternMode === 'v84_all') {
+      patternResult = calcPatternScoreV84(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    } else if (patternMode === 'v82_replace') {
+      patternResult = calcPatternScoreV82(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    } else if (patternMode === 'v82_bonus') {
+      patternResult = calcPatternScoreV82Bonus(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    } else {
+      patternResult = calcPatternScoreV81(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    }
+    var patternScore = patternResult.score
+    var patternName = patternResult.pattern
+    var bonusScore = patternResult.bonusScore || 0
+
+    if (strategy.requirePattern && patternName !== strategy.requirePattern) continue
+
+    // 二次确认
+    if (strategy.confirmADX && !confirmADX(tech, strategy.confirmADX)) continue
+    if (strategy.confirmMACD && !confirmMACDGolden(tech)) continue
+    if (strategy.confirmMACDPos && !confirmMACDPositive(tech)) continue
+    if (strategy.confirmMASupport && !confirmMASupport(klines, dateIdx, tech)) continue
+    if (strategy.confirmOBV && !confirmOBVUp(tech)) continue
+    if (strategy.confirmHighVolume && !confirmHighVolume(volumeRatio, strategy.confirmHighVolume)) continue
+    if (strategy.confirmAboveMA20 && !confirmAboveMA20(klines, dateIdx, tech)) continue
+    if (strategy.confirmBullAlign && !confirmBullAlign(tech)) continue
+    
+    // V84: MACD柱状图递增确认
+    if (strategy.confirmMACDIncr && !checkMACDHistogramIncreasing(klines, dateIdx)) continue
+    
+    // V84: 量价配合评分
+    var volPriceScore = 0
+    if (strategy.useVolPriceScore) {
+      volPriceScore = calcVolPriceScoreV84(klines, dateIdx)
+    }
+
+    var consecUp = calcConsecutiveUpDays(klines, dateIdx)
+    if (consecUp > maxConsecUp) continue
+
+    var totalScore = techScore + patternScore * (strategy.patternWeight || 1.0) + bonusScore * (strategy.bonusWeight || 1.0) + volPriceScore
+    var mildBonus = 0
+    var chg = stock.changePct || 0
+    if (chg >= 1 && chg < 3 && volumeRatio >= 1 && volumeRatio < 2) mildBonus = 8
+    else if (chg >= 0.5 && chg < 1 && volumeRatio >= 1 && volumeRatio < 1.5) mildBonus = 4
+    totalScore += mildBonus
+    if (tech.bollPosition > bollThreshold) totalScore *= params.volPenalty || 0.9
+    if (tech.obvTrend > 0) totalScore += 3
+    if (tech.adx >= adxThreshold) totalScore += 2
+    if (totalScore < minScore) continue
+
+    scored.push({
+      code: code, name: stock.name, price: stock.price || klines[dateIdx].close,
+      changePct: stock.changePct || 0, totalScore: totalScore,
+      techScore: techScore, patternScore: patternScore, bonusScore: bonusScore, patternName: patternName,
+      volumeRatio: volumeRatio, rsi: tech.rsi, isGapUp: patternResult.isGapUp,
+      ma5Slope: tech.ma5Slope, ma10Slope: tech.ma10Slope,
+      bollPosition: tech.bollPosition, adx: tech.adx
+    })
+  }
+
+  scored.sort(function(a, b) { return b.totalScore - a.totalScore })
+  var industryCount = {}
+  var result = []
+  for (var i = 0; i < scored.length && result.length < topN; i++) {
+    var ind = scored[i].patternName || 'other'
+    industryCount[ind] = (industryCount[ind] || 0) + 1

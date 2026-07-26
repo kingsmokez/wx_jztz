@@ -1,0 +1,60 @@
+function simulatePickV83b(dayQuotes, klineMap, dateIdxMap, topN, marketEnv, strategy) {
+  var params = V43B_PARAMS
+  var minScore = strategy.minScore || 55
+  var scored = []
+  var adxThreshold = 20, bollThreshold = 0.85, maxConsecUp = strategy.maxConsecUp || 5
+  if (params.adaptiveMarket && marketEnv) {
+    if (marketEnv.trend === "bear") {
+      adxThreshold = Math.max(20, adxThreshold + 8)
+      bollThreshold = Math.max(0.70, bollThreshold - 0.15)
+      if (params.dynamicConsec && !strategy.maxConsecUp) maxConsecUp = params.consecBear || 3
+    } else if (marketEnv.trend === "bull") {
+      bollThreshold = Math.min(0.92, bollThreshold + 0.05)
+      if (params.dynamicConsec && !strategy.maxConsecUp) maxConsecUp = params.consecBull || 6
+    } else { if (params.dynamicConsec && !strategy.maxConsecUp) maxConsecUp = params.consecNeutral || 5 }
+  }
+
+  for (var i = 0; i < dayQuotes.length; i++) {
+    var stock = dayQuotes[i]
+    if (!preFilter(stock)) continue
+    var code = stock.code
+    var klines = klineMap[code]
+    var dateIdx = dateIdxMap[code]
+    if (!klines || dateIdx === undefined || dateIdx < 20) continue
+    var volumeRatio = stock.volumeRatio || 0
+    if (volumeRatio <= 0) volumeRatio = calcVolumeRatioFromKlines(klines, dateIdx)
+    if (volumeRatio <= 0) continue
+    var techSlice = klines.slice(0, dateIdx + 1)
+    var tech = calcTechFromKlines(techSlice)
+    if (!tech) continue
+    if (strategy.ma5Min !== undefined && tech.ma5Slope < strategy.ma5Min) continue
+    if (strategy.ma10Min !== undefined && tech.ma10Slope < strategy.ma10Min) continue
+    if (strategy.vrMin && volumeRatio < strategy.vrMin) continue
+    if (strategy.rsiMax && tech.rsi > strategy.rsiMax) continue
+    if (strategy.chgMax && stock.changePct > strategy.chgMax) continue
+    if (strategy.chgMin && stock.changePct < strategy.chgMin) continue
+    var pricePos = calcPricePositionVsHigh(klines, dateIdx)
+    if (pricePos > (strategy.pricePosThreshold || 0.95)) continue
+    var v31Score = calcTechScoreV31(stock, tech.rsi, tech.goldenCross, volumeRatio, tech.bollPosition, code, tech.maSignal, tech.change5d || 0)
+    var v10Score = calcTechScoreV10(stock, tech.rsi, tech.goldenCross, volumeRatio, tech.bollPosition, code, tech.maSignal, tech.change5d || 0)
+    var techScore = v31Score * 0.75 + v10Score * 0.25
+    var patternResult = calcPatternScoreV81(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    if (strategy.requirePattern && patternResult.pattern !== strategy.requirePattern) continue
+    if (strategy.confirmMACD && !confirmMACDGolden(tech)) continue
+    if (strategy.confirmAboveMA20 && !confirmAboveMA20(klines, dateIdx, tech)) continue
+    var consecUp = calcConsecutiveUpDays(klines, dateIdx)
+    if (consecUp > maxConsecUp) continue
+    var totalScore = techScore + patternResult.score * (strategy.patternWeight || 1.0)
+    var mildBonus = 0
+    var chg = stock.changePct || 0
+    if (chg >= 1 && chg < 3 && volumeRatio >= 1 && volumeRatio < 2) mildBonus = 8
+    else if (chg >= 0.5 && chg < 1 && volumeRatio >= 1 && volumeRatio < 1.5) mildBonus = 4
+    totalScore += mildBonus
+    if (tech.bollPosition > bollThreshold) totalScore *= params.volPenalty || 0.9
+    if (tech.obvTrend > 0) totalScore += 3
+    if (tech.adx >= adxThreshold) totalScore += 2
+    if (totalScore < minScore) continue
+    scored.push({
+      code: code, name: stock.name, price: stock.price || klines[dateIdx].close,
+      changePct: stock.changePct || 0, totalScore: totalScore,
+      patternName: patternResult.pattern, volumeRatio: volumeRatio, rsi: tech.rsi,

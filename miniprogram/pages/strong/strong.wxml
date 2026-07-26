@@ -1,4 +1,4 @@
-﻿<!--pages/strong/strong.wxml — Loot Drop Brutalist 风格，对齐原版模板-->
+<!--pages/strong/strong.wxml — Loot Drop Brutalist 风格，对齐原版模板-->
 <wxs src="../../utils/format.wxs" module="fmt" />
 <view class="page-container">
   <!-- 大盘环境 -->
