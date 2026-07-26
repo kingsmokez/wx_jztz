@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 尾盘强势股选股 V7 - 优化版，解决超时
  * 优化：涨幅榜Top200+量比榜Top200合并，先粗评分取Top80再获取K线
  */
@@ -71,6 +71,8 @@ async function runWp2Picker(topN, force) {
   if (!topN) topN = 20
   var today = todayStr()
 
+  var _totalStart = Date.now()
+  var _MAX_TOTAL = 50000  // 总超时50秒保护
   if (!force) {
     try {
       var cached = await db.collection("pick_cache").where({ type: "wp2", date: today }).orderBy("cachedAt", "desc").limit(1).get()
@@ -125,6 +127,12 @@ async function runWp2Picker(topN, force) {
   candidates = candidates.slice(0, 60)
   console.log("粗筛候选: " + candidates.length + " 只")
 
+  // 超时保护
+  if (Date.now() - _totalStart > _MAX_TOTAL) {
+    console.warn('总超时保护: Phase1后已超时，返回空结果')
+    return { stocks: [], marketEnv: marketEnv, cached: false }
+  }
+
   // === Phase2: 并行获取K线+腾讯补全+行业 ===
   var klineCodes = candidates.map(function(c) { return c.stock.code })
   console.log("Phase2: 并行获取K线+腾讯+行业...")
@@ -134,7 +142,6 @@ async function runWp2Picker(topN, force) {
     http.fetchTencentBatch(klineCodes, 60).catch(function(e) { console.warn("腾讯补全失败:", e.message); return {} }),
     http.fetchIndustryBatch(klineCodes).catch(function(e) { console.warn("行业获取失败:", e.message); return {} })
   ])
-  var klinesMap = phase2Results[0]
   var klinesMap = phase2Results[0]
   var tencentData = phase2Results[1]
   var industryMap = phase2Results[2]

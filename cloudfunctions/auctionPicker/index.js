@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 早盘集合竞价选股 V6 - 对齐原版 auction_picker.py
  * 两阶段评分: Phase1趋势/量能/位置 + Phase2跳空/量比/竞价金额/大盘
  * 信号: 跳空高开/温和放量/趋势向好/确认信号/换手率激活
@@ -128,6 +128,8 @@ async function runAuctionPicker(topN, force) {
   if (!topN) topN = 20
   var today = todayStr()
 
+  var _totalStart = Date.now()
+  var _MAX_TOTAL = 50000  // 总超时50秒保护
   if (!force) {
     try {
       var cached = await db.collection("pick_cache").where({ type: "auction", date: today }).orderBy("cachedAt", "desc").limit(1).get()
@@ -180,6 +182,12 @@ async function runAuctionPicker(topN, force) {
   console.log("预筛选: " + candidates.length + " 只")
 
   if (candidates.length === 0) return { stocks: [], marketEnv: marketEnv, cached: false }
+
+  // 超时保护
+  if (Date.now() - _totalStart > _MAX_TOTAL) {
+    console.warn('总超时保护: Phase1后已超时，返回空结果')
+    return { stocks: [], marketEnv: marketEnv, cached: false }
+  }
 
   // === Phase2: 并行获取腾讯补全+行业 ===
   var candidateCodes = candidates.map(function(c) { return c.code })

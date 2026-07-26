@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 云函数统一调用封装
  * V3: 增加前端超时保护，在微信SDK超时前主动降级到缓存
  */
@@ -49,7 +49,7 @@ function callFunctionWithLoading(name, action, data) {
   if (!data) data = {}
   wx.showLoading({ title: '选股中...', mask: true })
   // 前端30秒超时保护，在微信SDK超时前主动降级
-  var frontendTimeout = 30000
+  var frontendTimeout = 50000
   return new Promise(function(resolve) {
     var done = false
     var timer = setTimeout(function() {

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 短线强势股选股 V73 - boll_squeeze+RSI未超买+ADX强趋势确认
  * 回测2年: WR=90.20% AR=3.08% n=51 (V70: WR=82.74% AR=2.06% n=168)
  * 核心形态: 布林收窄突破(boll_squeeze) + 涨幅1-2.5% + 量比>=1.8 + RSI<=60
@@ -318,6 +318,8 @@ async function runStrongPicker(topN, force) {
   if (!topN) topN = 20
   var today = todayStr()
 
+  var _totalStart = Date.now()
+  var _MAX_TOTAL = 50000  // 总超时50秒保护
   if (!force) {
     try {
       var cached = await db.collection("pick_cache").where({ type: "strong", date: today }).orderBy("cachedAt", "desc").limit(1).get()
@@ -375,6 +377,11 @@ async function runStrongPicker(topN, force) {
   console.log("粗筛候选: " + candidates.length + " 只")
 
   // === Phase2: 并行获取K线+腾讯补全+行业（省14秒）===
+  // 超时保护：Phase1后检查是否还有时间
+  if (Date.now() - _totalStart > _MAX_TOTAL) {
+    console.warn('总超时保护: Phase1后已超时，返回空结果')
+    return { stocks: [], marketEnv: marketEnv, cached: false }
+  }
   var klineCodes = candidates.map(function(c) { return c.stock.code })
   console.log("Phase2: 并行获取K线+腾讯+行业...")
   var phase2Start = Date.now()
@@ -393,6 +400,7 @@ async function runStrongPicker(topN, force) {
 
   for (var i = 0; i < candidates.length; i++) {
     var stock = candidates[i].stock
+    if (i % 10 === 0 && Date.now() - _totalStart > _MAX_TOTAL) { console.warn('评分超时保护，已处理' + i + '只'); break }
     var td = tencentData[stock.code]
     if (td) {
       if (td.roe) stock.roe = td.roe
