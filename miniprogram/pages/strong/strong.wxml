@@ -174,18 +174,18 @@
           </view>
         </view>
 
-<!-- V83持有策略 -->
+<!-- V84持有策略 -->
         <view class="hold-strategy" wx:if="{{item.holdStrategy}}">
           <view class="hs-header">
-      <text class='hs-title'>📊 持有策略 (V83 ATR止盈)</text>
-      <text class='hs-tag'>WR=88.57% AR=5.76%</text>
+      <text class='hs-title'>📊 持有策略 (V84 ATR止盈)</text>
+      <text class='hs-tag'>WR=91.67% AR=6.63%</text>
           </view>
           <view class="hs-rules">
             <text class="hs-rule">最大持有 {{item.holdStrategy.maxHoldDays}} 天</text>
-            <text class="hs-rule">ATR止盈: 目标1.2×ATR</text>
+            <text class="hs-rule">ATR止盈: 目标1.3×ATR</text>
             <text class="hs-rule">跟踪止损: 0.5×ATR回撤</text>
-            <text class="hs-rule">连涨≤4天过滤</text>
-            <text class="hs-rule">无固定止损</text>
+            <text class="hs-rule">连涨≤5天过滤</text>
+            <text class="hs-rule">旗形突破加分</text>
           </view>
         </view>
           </view>
