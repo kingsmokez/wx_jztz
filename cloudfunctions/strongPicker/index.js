@@ -1,9 +1,9 @@
 /**
- * 短线强势股选股 V79 - boll_squeeze+MACD金叉确认+量比放宽1.2
- * 回测2年: WR=84.21% AR=4.62% n=38 (V78: WR=86.84% AR=4.24% n=38)
- * 核心形态: 布林收窄突破(boll_squeeze,宽度<0.09) + 涨幅1-2.5% + 量比>=1.5 + RSI<=60
- * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉(趋势方向确认)
- * 退出策略: 4/7/10%阶梯移动止盈(1/2/3%回撤) + 最大持有21天 + 无止损
+ * 短线强势股选股 V82 - ATR止盈优化版
+ * 回测2年: WR=89.47% AR=4.61% n=38 (V81基线: WR=84.21% AR=4.62%)
+ * 核心形态: 布林收窄突破(boll_squeeze,宽度<0.09) + 涨幅1-2.5% + 量比>=1.2 + RSI<=60
+ * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉(趋势方向确认) + MA20上方确认
+ * 退出策略: ATR止盈(1.0xATR目标 + 0.5xATR跟踪止损) + 最大持有21天 + 无止损
  * 选股逻辑: boll_squeeze硬过滤 + MACD金叉确认 + MA20上方确认 + 量比>=1.2 + RSI<=60 + 多因子硬过滤 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -630,12 +630,15 @@ async function runStrongPicker(topN, force) {
       holdStrategy: {
         maxHoldDays: 21,
         stopLoss: -100,
+        atrExit: true,
+        atrMultiplier: 1.0,
+        atrTrailingMultiplier: 0.5,
         trailingRules: [
           { profitPct: 4, trailingPct: 1 },
           { profitPct: 7, trailingPct: 2 },
           { profitPct: 10, trailingPct: 3 }
         ],
-        description: "V79: boll_squeeze(宽度<0.09)+涨幅1-2.5%+量比>=1.2+RSI<=60+MACD金叉+MA20上方确认 + 4/7/10%阶梯止盈+21天, WR=84.21% AR=4.62%"
+        description: "V82: ATR止盈(1.0xATR目标+0.5xATR跟踪止损)+boll_squeeze+MACD金叉+MA20上方确认+21天, WR=89.47% AR=4.61%"
       },
       buySell: buySell,
       signals: buildSignalTags({

@@ -62,3 +62,11 @@ temp_patch3.py
 backtest/run_v80.js
 backtest/run_v81.js
 cloudfunctions/strongPicker/test_index.js
+
+# V82回测临时文件
+backtest/_fix.js
+backtest/_v82_funcs.js
+backtest/_v82_header.js
+backtest/run_v82.js
+backtest/run_v82b.js
+backtest/run_v82b_fixed.js
