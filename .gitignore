@@ -70,3 +70,7 @@ backtest/_v82_header.js
 backtest/run_v82.js
 backtest/run_v82b.js
 backtest/run_v82b_fixed.js
+# V83回测临时文件
+backtest/run_v83.js
+backtest/run_v83b.js
+backtest/indicators.js

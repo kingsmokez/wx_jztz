@@ -1,10 +1,10 @@
-/**
- * 短线强势股选股 V82 - ATR止盈优化版
- * 回测2年: WR=89.47% AR=4.61% n=38 (V81基线: WR=84.21% AR=4.62%)
+﻿/**
+ * 短线强势股选股 V83 - ATR1.2x+连涨过滤优化版
+ * 回测2年: WR=88.57% AR=5.76% n=35 (V82基线: WR=89.47% AR=4.61%)
  * 核心形态: 布林收窄突破(boll_squeeze,宽度<0.09) + 涨幅1-2.5% + 量比>=1.2 + RSI<=60
  * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉(趋势方向确认) + MA20上方确认
- * 退出策略: ATR止盈(1.0xATR目标 + 0.5xATR跟踪止损) + 最大持有21天 + 无止损
- * 选股逻辑: boll_squeeze硬过滤 + MACD金叉确认 + MA20上方确认 + 量比>=1.2 + RSI<=60 + 多因子硬过滤 */
+ * 退出策略: ATR止盈(1.2xATR目标 + 0.5xATR跟踪止损) + 最大持有21天 + 连涨<=4天
+ * 选股逻辑: boll_squeeze硬过滤 + MACD金叉确认 + MA20上方确认 + 量比>=1.2 + RSI<=60 + 连涨<=4天 + 多因子硬过滤 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
@@ -469,18 +469,14 @@ async function runStrongPicker(topN, force) {
 
     // === Adaptive market environment ===
     var simpleMktEnv = calcSimpleMarketEnv(marketEnv)
-    var maxConsecUp = 5
-    if (simpleMktEnv.trend === "bear") {
-      maxConsecUp = 3
-    } else if (simpleMktEnv.trend === "bull") {
-      maxConsecUp = 7
-    }
 
-    // === Consecutive up days: penalty instead of hard filter ===
-    var consecUpPenalty = 0
+    // === V83: Consecutive up days hard filter (max 4 days) ===
+    var consecUp = 0
     if (klines && klines.length >= 2) {
-      var consecUp = calcConsecutiveUpDays(klines)
-      if (consecUp > maxConsecUp) consecUpPenalty = -10
+      consecUp = calcConsecutiveUpDays(klines)
+    }
+    if (consecUp > 4) {
+      continue  // V83: 连涨超过4天，跳过（追高风险过大）
     }
 
     // === Bonus scoring (former V79 hard filters -> bonus items) ===
@@ -631,14 +627,14 @@ async function runStrongPicker(topN, force) {
         maxHoldDays: 21,
         stopLoss: -100,
         atrExit: true,
-        atrMultiplier: 1.0,
+        atrMultiplier: 1.2,
         atrTrailingMultiplier: 0.5,
         trailingRules: [
           { profitPct: 4, trailingPct: 1 },
           { profitPct: 7, trailingPct: 2 },
           { profitPct: 10, trailingPct: 3 }
         ],
-        description: "V82: ATR止盈(1.0xATR目标+0.5xATR跟踪止损)+boll_squeeze+MACD金叉+MA20上方确认+21天, WR=89.47% AR=4.61%"
+        description: "V83: ATR止盈(1.2xATR目标+0.5xATR跟踪止损)+boll_squeeze+MACD金叉+MA20上方+连涨<=4天, WR=88.57% AR=5.76%"
       },
       buySell: buySell,
       signals: buildSignalTags({
