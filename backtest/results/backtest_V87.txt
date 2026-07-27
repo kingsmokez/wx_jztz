@@ -1,0 +1,92 @@
+V87 Backtest: 上涨趋势信号增强+动态止盈优化
+V84最佳基线: v84_boll_or_flag_atr13 WR=91.18% AR=6.89% n=34
+Period: 2024-07-01 ~ 2026-07-24, 3-day sampling, 2343 stocks, 163 days
+
+Strategy                          n   WR%   AR%  AvgD vsV84WR vsV84AR
+-------------------------------------------------------------------------------------
+v84_best_base                     34 91.18  6.89  9.06 +     0 +    0
+v87_new_pool                      40    90  7.31   9.8  -1.18 + 0.42
+v87_new_hybrid                    40    85  1.45  6.18  -6.18 -5.44
+v87_new_hybrid_atr14              40    85  1.38   6.3  -6.18 -5.51
+v84_base_hybrid                   34 91.18  1.96  6.06 +     0 -4.93
+v84_base_hybrid_atr14             34 91.18   1.9  6.18 +     0 -4.99
+v87_new_hybrid_top15              40    85  1.45  6.18  -6.18 -5.44
+v87_new_hybrid_consec5            42 85.71  1.45  6.24  -5.47 -5.44
+v87_new_hybrid_vp                 40    85  1.45  6.18  -6.18 -5.44
+v87_new_only_hybrid                6    50 -1.42  6.83 -41.18 -8.31
+v87_new_hybrid_wide               87 81.61  0.93  5.32  -9.57 -5.96
+v84_base_hybrid_wide              77 84.42  1.06  5.14  -6.76 -5.83
+v87_new_hybrid_atr15              40    85  1.38   6.3  -6.18 -5.51
+v87_new_pool_atr14                40    85  7.38    10  -6.18 + 0.49
+v87_new_pool_atr15                40    85  7.69 10.25  -6.18 +  0.8
+v87_new_pool_min60                40    90  7.31   9.8  -1.18 + 0.42
+v87_bonus_pool                     0     0     0     0 -91.18 -6.89
+v87_new_pool_consec5              42 90.48  7.07  9.74   -0.7 + 0.18
+v87_new_pool_vp                   40    90  7.31   9.8  -1.18 + 0.42
+v87_new_pool_top15                40    90  7.31   9.8  -1.18 + 0.42
+v87_new_pool_min65                38 89.47  6.75  9.34  -1.71 -0.14
+v87_new_pool_min70                23  91.3  5.48  7.83 +  0.12 -1.41
+v87_new_pool_narrow               19 94.74  6.57  9.79 +  3.56 -0.32
+v84_best_atr14                    34 85.29  6.93  9.26  -5.89 + 0.04
+v87_new_pool_rsi55                23  91.3  6.96 10.65 +  0.12 + 0.07
+v87_new_pool_vr15                 40    90  7.31   9.8  -1.18 + 0.42
+v87_new_pool_eb_min65             38 89.47  6.75  9.34  -1.71 -0.14
+v87_narrow_wide_ma                24 83.33  4.79 10.71  -7.85  -2.1
+v87_narrow_min50                  19 94.74  6.57  9.79 +  3.56 -0.32
+v87_narrow_22                     30 86.67  6.79   9.3  -4.51  -0.1
+v87_rsi55_narrow                  17 88.24  6.72 10.88  -2.94 -0.17
+v87_rsi55_wide                    30 83.33  5.07 11.23  -7.85 -1.82
+v87_narrow_atr14                  19 89.47   6.5  9.89  -1.71 -0.39
+
+=== Sorted by composite (WR*0.35 + AR*6 + n*0.05) ===
+ 1. v87_new_pool_atr15               WR=85% AR=7.69% n=40 Score=77.89
+ 2. v87_new_pool                     WR=90% AR=7.31% n=40 Score=77.36
+ 3. v87_new_pool_min60               WR=90% AR=7.31% n=40 Score=77.36
+ 4. v87_new_pool_vp                  WR=90% AR=7.31% n=40 Score=77.36
+ 5. v87_new_pool_top15               WR=90% AR=7.31% n=40 Score=77.36
+ 6. v87_new_pool_vr15                WR=90% AR=7.31% n=40 Score=77.36
+ 7. v87_new_pool_consec5             WR=90.48% AR=7.07% n=42 Score=76.19
+ 8. v87_new_pool_atr14               WR=85% AR=7.38% n=40 Score=76.03
+ 9. v84_best_base                    WR=91.18% AR=6.89% n=34 Score=74.95
+10. v87_new_pool_rsi55               WR=91.3% AR=6.96% n=23 Score=74.87
+11. v87_new_pool_min65               WR=89.47% AR=6.75% n=38 Score=73.71
+12. v87_new_pool_eb_min65            WR=89.47% AR=6.75% n=38 Score=73.71
+13. v87_new_pool_narrow              WR=94.74% AR=6.57% n=19 Score=73.53
+14. v87_narrow_min50                 WR=94.74% AR=6.57% n=19 Score=73.53
+15. v84_best_atr14                   WR=85.29% AR=6.93% n=34 Score=73.13
+16. v87_narrow_22                    WR=86.67% AR=6.79% n=30 Score=72.57
+17. v87_rsi55_narrow                 WR=88.24% AR=6.72% n=17 Score=72.05
+18. v87_narrow_atr14                 WR=89.47% AR=6.5% n=19 Score=71.26
+19. v87_new_pool_min70               WR=91.3% AR=5.48% n=23 Score=65.99
+20. v87_rsi55_wide                   WR=83.33% AR=5.07% n=30 Score=61.09
+21. v87_narrow_wide_ma               WR=83.33% AR=4.79% n=24 Score=59.11
+22. v84_base_hybrid                  WR=91.18% AR=1.96% n=34 Score=45.37
+23. v84_base_hybrid_atr14            WR=91.18% AR=1.9% n=34 Score=45.01
+24. v87_new_hybrid_consec5           WR=85.71% AR=1.45% n=42 Score=40.8
+25. v87_new_hybrid                   WR=85% AR=1.45% n=40 Score=40.45
+26. v87_new_hybrid_top15             WR=85% AR=1.45% n=40 Score=40.45
+27. v87_new_hybrid_vp                WR=85% AR=1.45% n=40 Score=40.45
+28. v87_new_hybrid_atr14             WR=85% AR=1.38% n=40 Score=40.03
+29. v87_new_hybrid_atr15             WR=85% AR=1.38% n=40 Score=40.03
+30. v84_base_hybrid_wide             WR=84.42% AR=1.06% n=77 Score=39.76
+31. v87_new_hybrid_wide              WR=81.61% AR=0.93% n=87 Score=38.49
+32. v87_new_only_hybrid              WR=50% AR=-1.42% n=6 Score=9.28
+33. v87_bonus_pool                   WR=0% AR=0% n=0 Score=0
+
+=== WR>=92% and AR>=7.0% and n>=30 ===
+
+=== WR>=90% and AR>=6.5% and n>=30 ===
+  v87_new_pool: WR=90% AR=7.31% n=40
+  v87_new_pool_min60: WR=90% AR=7.31% n=40
+  v87_new_pool_vp: WR=90% AR=7.31% n=40
+  v87_new_pool_top15: WR=90% AR=7.31% n=40
+  v87_new_pool_vr15: WR=90% AR=7.31% n=40
+  v87_new_pool_consec5: WR=90.48% AR=7.07% n=42
+  v84_best_base: WR=91.18% AR=6.89% n=34
+
+=== Pattern distribution (top strategy) ===
+Pattern                 n   WR%   AR%
+boll_squeeze            33 84.85  6.56
+bull_align_accel         4    75  9.06
+vol_price_accel          2   100 11.64
+flag_breakout            1   100 31.71
