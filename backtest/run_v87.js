@@ -335,6 +335,338 @@ V87_STRATEGIES['v87_narrow_atr14'] = Object.assign({}, BASE_EXIT, {
   confirmMACD: true, confirmAboveMA20: true
 })
 
+// [V88优化组] 目标: WR>=91.2% AR>=6.9% n>=30 (超越V84所有指标)
+
+// rsiMax55+放宽MA增加样本 (rsi55单独WR=91.3%但n=23)
+V87_STRATEGIES['v88_rsi55_widema'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.08, ma10Min: 0.01, requirePattern: ALL_V87_PATS,
+  minScore: 50, patternWeight: 2.0, bollWidthMax: 0.10,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.0, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// rsiMax58 (介于55和60之间, 可能达到WR>91%)
+V87_STRATEGIES['v88_rsi58'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 58,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// rsiMax58+放宽MA
+V87_STRATEGIES['v88_rsi58_widema'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.08, ma10Min: 0.01, requirePattern: ALL_V87_PATS,
+  minScore: 50, patternWeight: 2.0, bollWidthMax: 0.10,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.0, rsiMax: 58,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 新形态+minScore58 (比55更严格, 比rsi55宽松)
+V87_STRATEGIES['v88_min58'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 58, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// rsiMax55+chgMax2.2 (严格RSI+窄涨幅双保险)
+V87_STRATEGIES['v88_rsi55_narrow22'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.2, vrMin: 1.2, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// rsiMax55+放宽MA+chgMax2.2
+V87_STRATEGIES['v88_rsi55_wide_narrow22'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.08, ma10Min: 0.01, requirePattern: ALL_V87_PATS,
+  minScore: 50, patternWeight: 2.0, bollWidthMax: 0.10,
+  chgMin: 1, chgMax: 2.2, vrMin: 1.0, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 仅V84基线形态+rsiMax55 (对照: V84基线+更严RSI)
+V87_STRATEGIES['v84_rsi55'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v84_all', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 新形态+consec3 (更严格连涨控制)
+V87_STRATEGIES['v88_consec3'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 3,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// rsiMax58+minScore58 (双严格)
+V87_STRATEGIES['v88_rsi58_min58'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 58, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 58,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// rsiMax55+extraBonus (更严RSI+额外加分)
+V87_STRATEGIES['v88_rsi55_eb'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true, extraBonus: true
+})
+
+// [V88核心: 门槛模式] 新形态需比V84形态高5分才胜出, 保持V84高WR
+V87_STRATEGIES['v88_threshold'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_threshold', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 门槛模式+rsiMax58
+V87_STRATEGIES['v88_threshold_rsi58'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_threshold', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 58,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 门槛模式+rsiMax55
+V87_STRATEGIES['v88_threshold_rsi55'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_threshold', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// [V88核心: 补充模式] V84形态为主+新形态bonus5分, 不改变V84排序
+V87_STRATEGIES['v88_supp'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 补充模式+rsiMax55
+V87_STRATEGIES['v88_supp_rsi55'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 55,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// 补充模式+rsiMax58
+V87_STRATEGIES['v88_supp_rsi58'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 58,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// ===== V88策略组 (asc_channel_break修复后) =====
+// 核心思路: V84形态(boll_squeeze+flag_breakout)为主 + 新形态bonus + 适度放宽参数
+// 目标: WR>=91.18% AR>=6.89% n>=34 (所有指标超越V84)
+
+// V88-A: V84形态 + supp bonus + chgMax2.8
+V87_STRATEGIES['v88_supp_c28'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-B: V84形态 + supp bonus + rsiMax62
+V87_STRATEGIES['v88_supp_r62'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-C: V84形态 + supp bonus + chgMax2.8 + rsiMax62
+V87_STRATEGIES['v88_supp_c28_r62'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-D: V84形态 + supp bonus + extraBonus + chgMax2.8
+V87_STRATEGIES['v88_supp_eb_c28'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true, extraBonus: true
+})
+
+// V88-E: V84形态 + supp bonus + chgMax2.8 + rsiMax62 + extraBonus
+V87_STRATEGIES['v88_supp_eb_c28_r62'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true, extraBonus: true
+})
+
+// V88-F: V84形态 + threshold + chgMax2.8 + rsiMax62 (门槛模式+放宽)
+V87_STRATEGIES['v88_thresh_c28_r62'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_threshold', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-G: V84形态 + 竞争模式 + chgMax2.8 + rsiMax62 (新形态可竞争替代)
+V87_STRATEGIES['v88_comp_c28_r62'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-H: V84形态 + supp + chgMax2.8 + rsiMax62 + minScore50 (低门槛+bonus精选)
+V87_STRATEGIES['v88_supp_c28_r62_m50'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 50, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-I: V84形态 + supp + chgMax3 + rsiMax65 (更宽)
+V87_STRATEGIES['v88_supp_c3_r65'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 3, vrMin: 1.2, rsiMax: 65,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-J: V84形态 + supp + chgMax2.8 + rsiMax62 + consecUp3
+V87_STRATEGIES['v88_supp_c28_r62_cu3'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 3,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 62,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-K: V84形态 + supp + chgMax2.8 + rsiMax58 (折中RSI)
+V87_STRATEGIES['v88_supp_c28_r58'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 58,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-L: V84形态 + supp + chgMax2.8 + rsiMax60 + extraBonus + minScore50
+V87_STRATEGIES['v88_supp_eb_c28_m50'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 50, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.8, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true, extraBonus: true
+})
+
+// ===== V88优化退出组 =====
+// 发现: 缩短持仓到18天+ATR1.3+Trail0.5 → WR=94.12% AR=7.05%
+// 核心: 更早获利了结, 避免长时间持仓的回撤风险
+
+// V88-O1: V84形态 + 持仓18天 + ATR1.3 + Trail0.5
+V87_STRATEGIES['v88_h18_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v84_all', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-O2: V84形态 + 持仓18天 + ATR1.2 + Trail0.5
+V87_STRATEGIES['v88_h18_a12_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v84_all', atrExit: true, atrMultiplier: 1.2, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-O3: V84形态 + 持仓18天 + ATR1.2 + Trail0.8
+V87_STRATEGIES['v88_h18_a12_t08'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v84_all', atrExit: true, atrMultiplier: 1.2, atrTrailingMultiplier: 0.8,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-O4: V84形态 + 持仓26天 + ATR1.3 + Trail0.5
+V87_STRATEGIES['v88_h26_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v84_all', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 26, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-O5: 新形态竞争 + 持仓18天 + ATR1.3 + Trail0.5
+V87_STRATEGIES['v88_new_h18_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-O6: V84形态 + supp bonus + 持仓18天 + ATR1.3 + Trail0.5
+V87_STRATEGIES['v88_supp_h18_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v87_supp', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V88-O7: V84形态 + 持仓18天 + ATR1.3 + Trail0.6
+V87_STRATEGIES['v88_h18_a13_t06'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v84_all', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.6,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
 // ===== 主流程 =====
 console.log('V87 Backtest: 上涨趋势信号增强+动态止盈优化')
 console.log('V84最佳基线: v84_boll_or_flag_atr13 WR=91.18% AR=6.89% n=34')
@@ -427,10 +759,10 @@ for (var si = 0; si < sampleDates.length; si++) {
         // V87混合退出: 阶梯止盈锁定利润 + ATR追踪止损
         exit = calcHybridExitV87(pick.price, klines, buyIdx, strategy.maxHoldDays || 21, atrVal, atrMult, atrTrailMult)
       } else if (strategy.dynamicATR) {
-        // V84动态ATR退出 (修复版: 盈利2%后激活追踪)
+        // 动态ATR退出 (盈利2%后激活追踪止损)
         exit = calcDynamicATRExitV2(pick.price, klines, buyIdx, strategy.maxHoldDays || 21, atrVal, atrMult, atrTrailMult)
       } else {
-        // 默认ATR阶梯退出 (V84基线atrExit:true走此分支)
+        // 默认ATR阶梯退出 (V84基线atrExit:true走此分支, AR最高)
         var atrProfit = atrVal * atrMult
         var atrTrailing = atrVal * atrTrailMult
         exit = calcDynamicExit(pick.price, klines, buyIdx, strategy.maxHoldDays || 21, strategy.stopLoss,

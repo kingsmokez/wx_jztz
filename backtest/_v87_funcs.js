@@ -1,11 +1,13 @@
 function detectAscendingChannelBreakout(klines, dateIdx) {
   if (dateIdx < 25 || dateIdx >= klines.length) return { detected: false, score: 0 }
+  // 取20天: 前10天(通道前半段) + 中9天(通道后半段,不含今天) + 今天(突破确认)
   var recent = klines.slice(dateIdx - 19, dateIdx + 1)
   if (recent.length < 20) return { detected: false, score: 0 }
 
-  // 分前10天和后10天, 检查低点和高点是否都在抬高
-  var firstHalf = recent.slice(0, 10)
-  var secondHalf = recent.slice(10, 20)
+  var firstHalf = recent.slice(0, 10)   // bar 0-9: 通道前半段
+  var secondHalf = recent.slice(10, 19)  // bar 10-18: 通道后半段(不含今天)
+  var today = recent[recent.length - 1]  // bar 19: 突破确认日
+
   var firstLow = Infinity, secondLow = Infinity
   var firstHigh = -Infinity, secondHigh = -Infinity
   for (var i = 0; i < firstHalf.length; i++) {
@@ -20,8 +22,7 @@ function detectAscendingChannelBreakout(klines, dateIdx) {
   if (secondLow < firstLow * 0.99) return { detected: false, score: 0 }
   if (secondHigh <= firstHigh) return { detected: false, score: 0 }
 
-  var today = recent[recent.length - 1]
-  // 今日突破后半段最高点
+  // 今日收盘突破后半段最高点(今天不参与secondHigh计算,所以可以突破)
   if (today.close <= secondHigh) return { detected: false, score: 0 }
 
   // 量能确认: 今日量 > 近5日均量
@@ -49,6 +50,7 @@ function detectAscendingChannelBreakout(klines, dateIdx) {
 
 // 信号2: 多头排列加速 (Bull Alignment Acceleration)
 // 逻辑: MA5>MA10>MA20多头排列 + MA5斜率加速上扬 + 量能放大
+// V88: 加强门槛 - MA5斜率>=1.0(原0.5), 加速比>=0.6(原0.45), 量能>=1.5(原1.3)
 function detectBullAlignAccel(klines, dateIdx) {
   if (dateIdx < 25 || dateIdx >= klines.length) return { detected: false, score: 0 }
   var closes = []
@@ -65,14 +67,14 @@ function detectBullAlignAccel(klines, dateIdx) {
   var ma5_3ago = calcMA(closes.slice(0, closes.length - 3), 5)
   if (ma5_3ago <= 0) return { detected: false, score: 0 }
   var ma5SlopePct = (ma5 - ma5_3ago) / ma5_3ago * 100
-  // 斜率需为正且加速 (近3天斜率 > 近6天斜率的一半)
-  if (ma5SlopePct < 0.5) return { detected: false, score: 0 }
+  // V88: 斜率需>=1.0(原0.5), 更强趋势确认
+  if (ma5SlopePct < 1.0) return { detected: false, score: 0 }
 
   var ma5_6ago = calcMA(closes.slice(0, closes.length - 6), 5)
   if (ma5_6ago <= 0) return { detected: false, score: 0 }
   var ma5Slope6 = (ma5 - ma5_6ago) / ma5_6ago * 100
-  // 加速: 近3天斜率应大于近6天斜率的一半 (表示在加速)
-  if (ma5SlopePct < ma5Slope6 * 0.45) return { detected: false, score: 0 }
+  // V88: 加速比>=0.6(原0.45)
+  if (ma5SlopePct < ma5Slope6 * 0.6) return { detected: false, score: 0 }
 
   var today = klines[dateIdx]
   // 今日收盘在MA5上方
@@ -84,7 +86,10 @@ function detectBullAlignAccel(klines, dateIdx) {
   avgVol5 /= 5
   var volRatio = avgVol5 > 0 ? today.volume / avgVol5 : 0
 
-  var score = 15
+  // V88: 量能需>=1.5(原1.3才加分)
+  if (volRatio < 1.5) return { detected: false, score: 0 }
+
+  var score = 18 // V88: 基础分提高(原15), 通过更严格门槛的信号更可靠
   // 斜率强度加分
   if (ma5SlopePct >= 1.5 && ma5SlopePct <= 4) score += 5
   else if (ma5SlopePct > 4) score += 3
@@ -92,8 +97,8 @@ function detectBullAlignAccel(klines, dateIdx) {
   var accelRatio = ma5Slope6 > 0 ? ma5SlopePct / ma5Slope6 : 0
   if (accelRatio >= 0.8 && accelRatio <= 2.0) score += 4
   // 量能确认
-  if (volRatio >= 1.8) score += 3
-  else if (volRatio >= 1.3) score += 1
+  if (volRatio >= 2.0) score += 3
+  else if (volRatio >= 1.5) score += 1
   // MA20上方距离加分 (不远不近最优)
   var distFromMA20 = (today.close - ma20) / ma20 * 100
   if (distFromMA20 >= 2 && distFromMA20 <= 8) score += 3
@@ -103,6 +108,7 @@ function detectBullAlignAccel(klines, dateIdx) {
 
 // 信号3: 量价齐升加速 (Volume-Price Acceleration)
 // 逻辑: 连续3日上涨且量能递增 + 今日涨幅扩大 + 突破近10日高点
+// V88: 加强门槛 - 今日涨幅>3%(原仅>昨日涨幅), 量能递增比>=1.3(原>1), 量比>=1.5
 function detectVolPriceAccel(klines, dateIdx) {
   if (dateIdx < 12 || dateIdx >= klines.length) return { detected: false, score: 0 }
   var recent = klines.slice(dateIdx - 11, dateIdx + 1)
@@ -121,10 +127,11 @@ function detectVolPriceAccel(klines, dateIdx) {
   }
   if (!volIncreasing) return { detected: false, score: 0 }
 
-  // 今日涨幅扩大 (今日涨幅 > 昨日涨幅)
+  // 今日涨幅扩大 + V88: 今日涨幅必须>=3%
   var todayChg = (today.close - today.open) / today.open * 100
   var yestChg = (last3[1].close - last3[1].open) / last3[1].open * 100
   if (todayChg <= yestChg) return { detected: false, score: 0 }
+  if (todayChg < 3) return { detected: false, score: 0 }  // V88: 涨幅门槛
 
   // 突破近10日高点
   var high10 = -Infinity
@@ -133,21 +140,27 @@ function detectVolPriceAccel(klines, dateIdx) {
   }
   if (today.close <= high10) return { detected: false, score: 0 }
 
-  var score = 15
+  // V88: 量能递增比>=1.3 (3天总量/首天量>=1.3)
+  var volRatio3 = last3[0].volume > 0 ? last3[2].volume / last3[0].volume : 0
+  if (volRatio3 < 1.3) return { detected: false, score: 0 }  // V88: 量能门槛
+
+  // V88: 近5日均量对比>=1.5
+  var avgVol5 = 0
+  for (var i = recent.length - 6; i < recent.length - 1; i++) avgVol5 += recent[i].volume
+  avgVol5 /= 5
+  if (avgVol5 <= 0 || today.volume / avgVol5 < 1.5) return { detected: false, score: 0 }  // V88: 量比门槛
+
+  var score = 18 // V88: 基础分提高(原15), 通过更严格门槛的信号更可靠
   // 涨幅梯度加分
   if (todayChg >= 3 && todayChg <= 6) score += 4
   else if (todayChg > 6) score += 2
   // 量能递增幅度
-  var volRatio3 = last3[0].volume > 0 ? last3[2].volume / last3[0].volume : 0
   if (volRatio3 >= 1.5) score += 4
-  else if (volRatio3 >= 1.2) score += 2
+  else if (volRatio3 >= 1.3) score += 2
   // 突破幅度
   if (today.close > high10 * 1.02) score += 3
   // 近5日均量对比
-  var avgVol5 = 0
-  for (var i = recent.length - 6; i < recent.length - 1; i++) avgVol5 += recent[i].volume
-  avgVol5 /= 5
-  if (avgVol5 > 0 && today.volume / avgVol5 >= 2.0) score += 3
+  if (today.volume / avgVol5 >= 2.0) score += 3
 
   return { detected: true, score: score }
 }
@@ -166,6 +179,40 @@ function calcPatternScoreV87(stock, klines, dateIdx, tech, volumeRatio, bollWidt
   if (vp.detected && vp.score > bestScore) { bestPattern = 'vol_price_accel'; bestScore = vp.score }
 
   return { pattern: bestPattern, score: bestScore, isGapUp: base.isGapUp }
+}
+
+// V87形态评分(门槛模式): 新形态score需高于V84形态至少5分才胜出
+// 避免边缘新形态拉低整体WR，保持V84形态高WR同时引入高质量新信号
+function calcPatternScoreV87Threshold(stock, klines, dateIdx, tech, volumeRatio, bollWidthMax) {
+  var base = calcPatternScoreV84(stock, klines, dateIdx, tech, volumeRatio, bollWidthMax)
+  var bestPattern = base.pattern, bestScore = base.score
+
+  // V87新增形态: 需要比V84形态高5分才胜出(质量门槛)
+  var ac = detectAscendingChannelBreakout(klines, dateIdx)
+  if (ac.detected && ac.score > bestScore + 5) { bestPattern = 'asc_channel_break'; bestScore = ac.score }
+  var ba = detectBullAlignAccel(klines, dateIdx)
+  if (ba.detected && ba.score > bestScore + 5) { bestPattern = 'bull_align_accel'; bestScore = ba.score }
+  var vp = detectVolPriceAccel(klines, dateIdx)
+  if (vp.detected && vp.score > bestScore + 5) { bestPattern = 'vol_price_accel'; bestScore = vp.score }
+
+  return { pattern: bestPattern, score: bestScore, isGapUp: base.isGapUp }
+}
+
+// V87形态评分(补充模式): V84形态为主 + 新形态作为bonus加分(5分)
+// 新形态不替代V84形态，仅作为额外确认加分
+function calcPatternScoreV87Supp(stock, klines, dateIdx, tech, volumeRatio, bollWidthMax) {
+  var base = calcPatternScoreV84(stock, klines, dateIdx, tech, volumeRatio, bollWidthMax)
+  var bonus = 0
+
+  // 新形态作为bonus确认(不竞争，叠加加分)
+  var ac = detectAscendingChannelBreakout(klines, dateIdx)
+  if (ac.detected) bonus += 5
+  var ba = detectBullAlignAccel(klines, dateIdx)
+  if (ba.detected) bonus += 5
+  var vp = detectVolPriceAccel(klines, dateIdx)
+  if (vp.detected) bonus += 5
+
+  return { pattern: base.pattern, score: base.score, bonus: bonus, isGapUp: base.isGapUp }
 }
 
 // V87形态评分(bonus模式): V84 + V87新形态叠加加分
@@ -300,6 +347,10 @@ function simulatePickV87(dayQuotes, klineMap, dateIdxMap, topN, marketEnv, strat
     var patternMode = strategy.patternMode || 'v84_all'
     if (patternMode === 'v87') {
       patternResult = calcPatternScoreV87(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    } else if (patternMode === 'v87_threshold') {
+      patternResult = calcPatternScoreV87Threshold(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    } else if (patternMode === 'v87_supp') {
+      patternResult = calcPatternScoreV87Supp(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
     } else if (patternMode === 'v87_bonus') {
       patternResult = calcPatternScoreV87Bonus(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
     } else if (patternMode === 'v84_all') {

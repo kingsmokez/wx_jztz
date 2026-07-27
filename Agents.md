@@ -11,8 +11,21 @@
 > **语言规则**：Codex 必须使用中文进行所有对话回复，包括问题描述、方案说明、代码注释和错误分析。
 > 仅以下情况可使用英文：代码变量名、API 名称、技术专有名词（如 RSI、MACD、ROE、PE、PB）、
 > npm 包名、命令行指令、JSON 配置键名、URL 路径等无法或不适合用中文表达的内容。
+---
+
+## Repository Map
+
+A full codemap is available at `codemap.md` in the project root.
+
+Before working on any task, read `codemap.md` to understand:
+- Project architecture and entry points
+- Directory responsibilities and design patterns
+- Data flow and integration points between modules
+
+For deep work on a specific folder, also read that folder's `codemap.md`.
 
 ---
+
 ## 一、项目概述
 
 ### 1.1 功能范围

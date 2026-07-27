@@ -125,6 +125,11 @@ function genAuctionSignals(stock, phase1, phase2) {
 
 // ===== 主选股函数 =====
 async function runAuctionPicker(topN, force) {
+  // 判断是否盘后
+  var _now = new Date(Date.now() + 8 * 3600 * 1000)
+  var _hour = _now.getUTCHours()
+  var _day = _now.getUTCDay()
+  var isAfterHours = (_hour >= 15 || _hour < 9 || _day === 0 || _day === 6)
   if (!topN) topN = 20
   var today = todayStr()
 
@@ -172,11 +177,19 @@ async function runAuctionPicker(topN, force) {
     if (!s.code || !s.name) continue
     if (s.name.indexOf("ST") >= 0 || s.name.indexOf("*") >= 0 || s.name.indexOf("退") >= 0) continue
     if (s.code.startsWith("8") || s.code.startsWith("4") || s.code.startsWith("920") || s.code.startsWith("900") || s.code.startsWith("200")) continue
-    if (s.price <= 3 || s.price > 500) continue
-    if (s.circCap > 0 && (s.circCap < 20 || s.circCap > 3000)) continue
+    if (isAfterHours) {
+      if (s.price <= 1 || s.price > 500) continue
+    } else {
+      if (s.price <= 3 || s.price > 500) continue
+    }
+    if (s.circCap > 0 && (s.circCap < 10 || s.circCap > 3000)) continue
+    if (isAfterHours) {
+      if (s.changePct < -8) continue
+    } else {
       if (s.changePct < -5) continue
       var limitPct = (s.code && (s.code.startsWith("300") || s.code.startsWith("301") || s.code.startsWith("688"))) ? 19.5 : 9.5
       if (s.changePct > limitPct) continue
+    }
     candidates.push(s)
   }
   console.log("预筛选: " + candidates.length + " 只")

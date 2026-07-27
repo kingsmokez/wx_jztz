@@ -54,14 +54,20 @@ function genWp2Signals(stock, rsi, goldenCross, maSignal, volumeRatio, bollPosit
   return signals.length > 0 ? signals : ["关注"]
 }
 
-function quickScore(stock) {
+function quickScore(stock, isAfterHours) {
   var score = 0
   var chg = stock.changePct || 0
   var vr = stock.volumeRatio || 0
   var to = stock.turnover || 0
-  if (chg >= 2 && chg <= 7) score += 30; else if (chg >= 1 && chg < 2) score += 20; else if (chg >= 0 && chg < 1) score += 10
-  if (vr >= 1.5 && vr <= 5) score += 25; else if (vr >= 1 && vr < 1.5) score += 15; else if (vr > 5) score += 15
-  if (to >= 2 && to <= 8) score += 20; else if (to >= 1 && to < 2) score += 15
+  if (isAfterHours) {
+    if (chg >= 2 && chg <= 7) score += 30; else if (chg >= 1 && chg < 2) score += 25; else if (chg >= 0 && chg < 1) score += 15; else if (chg >= -2 && chg < 0) score += 5
+    if (vr >= 1.5 && vr <= 5) score += 25; else if (vr >= 1 && vr < 1.5) score += 15; else if (vr > 5) score += 15; else if (vr <= 0) score += 8
+    if (to >= 2 && to <= 8) score += 20; else if (to >= 1 && to < 2) score += 15; else if (to <= 0) score += 5
+  } else {
+    if (chg >= 2 && chg <= 7) score += 30; else if (chg >= 1 && chg < 2) score += 20; else if (chg >= 0 && chg < 1) score += 10
+    if (vr >= 1.5 && vr <= 5) score += 25; else if (vr >= 1 && vr < 1.5) score += 15; else if (vr > 5) score += 15
+    if (to >= 2 && to <= 8) score += 20; else if (to >= 1 && to < 2) score += 15
+  }
   if (stock.pe > 0 && stock.pe <= 30) score += 10; else if (stock.pe > 30 && stock.pe <= 50) score += 5
   if ((stock.circCap || 0) >= 30 && (stock.circCap || 0) <= 200) score += 15
   return score
@@ -70,6 +76,10 @@ function quickScore(stock) {
 async function runWp2Picker(topN, force) {
   if (!topN) topN = 20
   var today = todayStr()
+  var _now = new Date(Date.now() + 8 * 3600 * 1000)
+  var _hour = _now.getUTCHours()
+  var _day = _now.getUTCDay()
+  var isAfterHours = (_hour >= 15 || _hour < 9 || _day === 0 || _day === 6)
 
   var _totalStart = Date.now()
   var _MAX_TOTAL = 50000  // 总超时50秒保护
@@ -113,16 +123,30 @@ async function runWp2Picker(topN, force) {
   console.log("候选股票: " + codes.length + " 只")
 
   var candidates = []
+  var filterStats = { total: codes.length, noName: 0, st: 0, priceLow: 0, chgLow: 0, turnoverLow: 0, capLow: 0, bse: 0, qsLow: 0 }
   for (var i = 0; i < codes.length; i++) {
     var stock = allStocks[codes[i]]
-    if (!stock || !stock.name || stock.name.indexOf("ST") >= 0 || stock.name.indexOf("退") >= 0) continue
-    if (stock.price <= 3 || stock.changePct <= 0) continue
-    if (stock.turnover < 1 && stock.volumeRatio < 1) continue
-    if (stock.circCap > 0 && stock.circCap < 20) continue
-    if (stock.code.startsWith("8") || stock.code.startsWith("4") || stock.code.startsWith("920")) continue
-    var qs = quickScore(stock)
-    if (qs >= 25) candidates.push({ stock: stock, quickScore: qs })
+    if (!stock || !stock.name) { filterStats.noName++; continue }
+    if (stock.name.indexOf("ST") >= 0 || stock.name.indexOf("退") >= 0) { filterStats.st++; continue }
+    if (isAfterHours) {
+      if (stock.price <= 1) { filterStats.priceLow++; continue }
+      if (stock.changePct < -5) { filterStats.chgLow++; continue }
+    } else {
+      if (stock.price <= 3 || stock.changePct <= 0) { filterStats.priceLow++; continue }
+    }
+    if (!isAfterHours) {
+      if (stock.turnover < 1 && stock.volumeRatio < 1) { filterStats.turnoverLow++; continue }
+    } else {
+      if (stock.turnover <= 0 && stock.volumeRatio <= 0 && stock.changePct <= 0) { filterStats.turnoverLow++; continue }
+    }
+    if (stock.circCap > 0 && stock.circCap < 10) { filterStats.capLow++; continue }
+    if (stock.code.startsWith("8") || stock.code.startsWith("4") || stock.code.startsWith("920")) { filterStats.bse++; continue }
+    var qs = quickScore(stock, isAfterHours)
+    var minQS = isAfterHours ? 5 : 25
+    if (qs >= minQS) candidates.push({ stock: stock, quickScore: qs })
+    else filterStats.qsLow++
   }
+  console.log("粗筛统计:", JSON.stringify(filterStats))
   candidates.sort(function(a, b) { return b.quickScore - a.quickScore })
   candidates = candidates.slice(0, 60)
   console.log("粗筛候选: " + candidates.length + " 只")

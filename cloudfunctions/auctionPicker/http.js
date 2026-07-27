@@ -183,6 +183,67 @@ async function fetchEMRank(page, pageSize) {
   } catch(e) { return [] }
 }
 
+// ===== 东财datacenter股票排行（备用源，datacenter域名未被封锁）=====
+// 使用datacenter-web.eastmoney.com替代push2.eastmoney.com
+async function fetchEMDataCenterRank(sortField, topN) {
+  if (!topN) topN = 200
+  var allStocks = {}
+  // datacenter的实时行情接口
+  var fidMap = { "f3": "CHANGE_RATE", "f8": "TURNOVERRATE", "f10": "VOLUME_RATIO", "f6": "DEAL_AMOUNT" }
+  var sortField2 = fidMap[sortField] || "CHANGE_RATE"
+  var pageSize = Math.min(topN, 100)
+  var pages = Math.ceil(topN / pageSize)
+  for (var p = 1; p <= pages; p++) {
+    try {
+      var url = "https://datacenter-web.eastmoney.com/api/data/v1/get" +
+        "?reportName=RPT_LICO_FN_CPD" +
+        "&columns=SECURITY_CODE,SECURITY_NAME_ABBR,NEW_PRICE,CHANGE_RATE,VOLUME_RATIO,TURNOVERRATE,DEAL_AMOUNT,PE_TTM,TOTAL_MARKET_CAP,CIRC_MARKET_CAP,PB_NEW" +
+        "&sortColumns=" + sortField2 +
+        "&sortTypes=-1" +
+        "&pageSize=" + pageSize +
+        "&pageNumber=" + p +
+        "&source=WEB&client=WEB"
+      var text = await request(url, {
+        timeout: 8000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": "https://data.eastmoney.com/",
+          "Accept": "application/json"
+        }
+      })
+      var data = JSON.parse(text)
+      if (!data || !data.result || !data.result.data) continue
+      var items = data.result.data
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i]
+        var code = String(item.SECURITY_CODE || "")
+        if (!code || code.length !== 6) continue
+        var price = parseFloat(item.NEW_PRICE) || 0
+        if (price <= 0) continue
+        // 过滤北交所
+        if (code.startsWith("8") || code.startsWith("4") || code.startsWith("920")) continue
+        allStocks[code] = {
+          code: code,
+          name: String(item.SECURITY_NAME_ABBR || ""),
+          price: price,
+          changePct: parseFloat(item.CHANGE_RATE) || 0,
+          volumeRatio: parseFloat(item.VOLUME_RATIO) || 0,
+          turnover: parseFloat(item.TURNOVERRATE) || 0,
+          amount: parseFloat(item.DEAL_AMOUNT) || 0,
+          pe: parseFloat(item.PE_TTM) || 0,
+          pb: parseFloat(item.PB_NEW) || 0,
+          circCap: parseFloat(item.CIRC_MARKET_CAP) || 0,
+          totalCap: parseFloat(item.TOTAL_MARKET_CAP) || 0,
+          market: code.startsWith("6") ? "1" : "0",
+          industry: "",
+        }
+      }
+    } catch(e) { console.warn("[datacenter排行]" + sortField + "第" + p + "页失败:", e.message) }
+  }
+  console.log("[datacenter排行] 获取 " + Object.keys(allStocks).length + " 只, sortField=" + sortField)
+  return allStocks
+}
+
 // ===== K线并发获取（优化版：并发30，单只4秒超时）=====
 async function fetchKlinesConcurrent(codes, concurrency) {
   if (!concurrency) concurrency = 30
@@ -868,6 +929,9 @@ var INDUSTRY_MAP = [
   ["地产","房地产-房地产"],["核电","公用事业-核电"],["消费电子","电子-消费电子"],
   ["电子","电子-电子元件"],
   // === 名称关键词补充映射（兜底用）===
+  ["国光","农林牧渔-农化制品"],
+  ["世茂","公用事业-热力"],
+  ["北化","基础化工-化学制品"],
   ["能源","公用事业-电力"],  ["热电","公用事业-火电"],
   ["水电","公用事业-水电"],
   ["核电","公用事业-核电"],
@@ -922,9 +986,7 @@ var INDUSTRY_MAP = [
   ["科技","计算机-IT服务"],
   ["数据","计算机-IT服务"],
   ["智能","计算机-IT服务"],
-  // === 更多名称关键词补充（解决"综合"行业问题）===
-  ["国光","农林牧渔-农化制品"],["热力","公用事业-热力"],["热电","公用事业-火电"],
-  ["世茂","公用事业-热力"],["联产","公用事业-火电"],["供热","公用事业-热力"],
+  // === 更多名称关键词补充（解决"综合"行业问题）===["热力","公用事业-热力"],["热电","公用事业-火电"],["联产","公用事业-火电"],["供热","公用事业-热力"],
   ["农药","农林牧渔-农化制品"],["化肥","基础化工-化肥农药"],["植保","农林牧渔-农化制品"],
   ["植物","农林牧渔-农化制品"],["调节剂","农林牧渔-农化制品"],
   ["煤电","公用事业-火电"],["火电","公用事业-火电"],["发电","公用事业-电力"],
@@ -1025,6 +1087,10 @@ function guessFromCodePrefix(name, code) {
   // 尝试从名称和代码推断更精确的行业
   if (name) {
     var n = String(name)
+    // === 特定股票名称精确匹配（优先级最高，防止通用关键词误匹配）===
+    if (n.indexOf("国光") >= 0) return "农林牧渔-农化制品"
+    if (n.indexOf("世茂") >= 0) return "公用事业-热力"
+    if (n.indexOf("北化") >= 0) return "基础化工-化学制品"
     // 更精确的名称匹配
     if (n.indexOf("能源") >= 0 || n.indexOf("电力") >= 0 || n.indexOf("热力") >= 0 || n.indexOf("供热") >= 0) return "公用事业-电力"
     if (n.indexOf("煤") >= 0) return "煤炭-煤炭"
@@ -1067,9 +1133,7 @@ function guessFromCodePrefix(name, code) {
     if (n.indexOf("航空") >= 0) return "交通运输-航空"
     if (n.indexOf("船舶") >= 0 || n.indexOf("海运") >= 0) return "交通运输-航运"
     if (n.indexOf("军工") >= 0 || n.indexOf("航天") >= 0 || n.indexOf("国防") >= 0) return "国防军工-军工电子"
-    if (n.indexOf("国光") >= 0) return "农林牧渔-农化制品"
-    if (n.indexOf("世茂") >= 0) return "公用事业-热力"
-    if (n.indexOf("北化") >= 0) return "基础化工-化学制品"
+
   }
   return "其他-其他"
 }
@@ -1269,24 +1333,48 @@ async function fetchStockList(sortField, topN) {
   console.log("[多源] 开始获取股票列表, sortField=" + sortField + ", topN=" + topN)
   var stocks = {}
   var listStart = Date.now()
-  var MAX_LIST_TIME = 20000  // 总超时20秒
+  var MAX_LIST_TIME = 25000  // 总超时25秒
 
   // === 源1: 东财push2 API ===
+  var source1OK = false
   try {
     console.log("[源1] 尝试东财push2...")
     var emResult = await fetchEMByField(sortField, topN)
     var emCount = Object.keys(emResult).length
     console.log("[源1] 东财返回: " + emCount + " 只, 耗时 " + (Date.now() - listStart) + "ms")
-    if (emCount >= 20) {
-      console.log("[源1] 东财数据充足，使用东财")
+    if (emCount >= 50) {
+      console.log("[源1] 东财数据充足，直接使用")
       return emResult
     }
-    if (emCount > 0) stocks = emResult
-  } catch(e) { console.warn("[源1] 东财失败:", e.message) }
+    if (emCount > 0) {
+      for (var k in emResult) { stocks[k] = emResult[k] }
+      source1OK = emCount >= 20
+    }
+  } catch(e) { console.warn("[源1] 东财push2失败:", e.message) }
 
   // 超时保护
   if (Date.now() - listStart > MAX_LIST_TIME) {
     console.warn("[多源] 源1后已超时，返回已有数据")
+    return stocks
+  }
+
+  // === 源1.5: 东财datacenter排行（财务数据，有PE/ROE等基本面字段）===
+  if (!source1OK) {
+    try {
+      console.log("[源1.5] push2不可用，尝试东财datacenter基本面排行...")
+      var dcResult = await fetchEMDataCenterRank(sortField, topN)
+      var dcCount = Object.keys(dcResult).length
+      console.log("[源1.5] datacenter返回: " + dcCount + " 只, 耗时 " + (Date.now() - listStart) + "ms")
+      if (dcCount > 0) {
+        for (var k in dcResult) { if (!stocks[k]) stocks[k] = dcResult[k] }
+        console.log("[源1.5] 合并后: " + Object.keys(stocks).length + " 只")
+      }
+    } catch(e) { console.warn("[源1.5] datacenter失败:", e.message) }
+  }
+
+  // 超时保护
+  if (Date.now() - listStart > MAX_LIST_TIME) {
+    console.warn("[多源] 源1.5后已超时，返回已有数据")
     return stocks
   }
 
@@ -1297,12 +1385,11 @@ async function fetchStockList(sortField, topN) {
     var sinaCount = Object.keys(sinaResult).length
     console.log("[源2] 新浪+腾讯返回: " + sinaCount + " 只, 耗时 " + (Date.now() - listStart) + "ms")
     if (sinaCount >= 20) {
-      for (var k in sinaResult) { stocks[k] = sinaResult[k] }
+      for (var k in sinaResult) { if (!stocks[k]) stocks[k] = sinaResult[k] }
       console.log("[源2] 合并后: " + Object.keys(stocks).length + " 只")
-      return stocks
-    }
-    if (sinaCount > 0) {
-      for (var k in sinaResult) { stocks[k] = sinaResult[k] }
+      // 不再直接return，继续让后续源补充数据
+    } else if (sinaCount > 0) {
+      for (var k in sinaResult) { if (!stocks[k]) stocks[k] = sinaResult[k] }
     }
   } catch(e) { console.warn("[源2] 新浪+腾讯失败:", e.message) }
 
@@ -1313,19 +1400,21 @@ async function fetchStockList(sortField, topN) {
   }
 
   // === 源3: 腾讯热门股票批量 ===
-  try {
-    console.log("[源3] 尝试腾讯热门批量...")
-    var txResult = await fetchTencentHotStocks(topN)
-    var txCount = Object.keys(txResult).length
-    console.log("[源3] 腾讯热门返回: " + txCount + " 只")
-    for (var k in txResult) { stocks[k] = txResult[k] }
-  } catch(e) { console.warn("[源3] 腾讯热门失败:", e.message) }
+  if (Object.keys(stocks).length < 50) {
+    try {
+      console.log("[源3] 数据仍不足，尝试腾讯热门批量...")
+      var txResult = await fetchTencentHotStocks(topN)
+      var txCount = Object.keys(txResult).length
+      console.log("[源3] 腾讯热门返回: " + txCount + " 只")
+      for (var k in txResult) { if (!stocks[k]) stocks[k] = txResult[k] }
+    } catch(e) { console.warn("[源3] 腾讯热门失败:", e.message) }
+  }
 
   console.log("[多源] 最终合并: " + Object.keys(stocks).length + " 只, 总耗时 " + (Date.now() - listStart) + "ms")
   return stocks
 }
 
-// ===== 新浪涨幅榜 + 腾讯详情补全 =====
+// ===== 新浪涨幅榜 + 腾讯详情补全 =====// ===== 新浪涨幅榜 + 腾讯详情补全 =====// ===== 新浪涨幅榜 + 腾讯详情补全 =====
 async function fetchSinaRankWithTencent(topN) {
   var allStocks = {}
   var pages = Math.ceil(topN / 80)
@@ -1474,6 +1563,7 @@ async function fetchTencentHotStocks(topN) {
   return results
 }
 module.exports = {
+  fetchEMDataCenterRank: fetchEMDataCenterRank,
   fetchStockList: fetchStockList,
   fetchSinaRankWithTencent: fetchSinaRankWithTencent,
   fetchTencentHotStocks: fetchTencentHotStocks,
