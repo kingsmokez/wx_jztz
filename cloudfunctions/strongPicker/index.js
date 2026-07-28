@@ -1,10 +1,10 @@
 ﻿/**
- * 短线强势股选股 V90b - jztz_v17评分 + 形态过滤版
+ * 短线强势股选股 V90b - jztz_v17评分 + 形态加分版
  * 回测2年对比: V90b vs jztz_v17全面更优
  *   Top3: WR 69.23% vs 67.65% (+1.58%), AR 1.40% vs 1.19% (+0.21%)
  *   Top5: WR 67.93% vs 66.63% (+1.30%), AR 1.28% vs 1.26% (+0.02%)
- * V90b策略: 纯jztz_v17评分(blendedScore=techScore*0.6+v5Score*0.4) + 形态仅做过滤(有形态才选)
- * 形态过滤: 5形态竞争(旗形突破/布林收窄/上升通道/多头加速/量价齐升), bestScore>0才保留
+ * V90b策略: jztz_v17评分(blendedScore=techScore*0.6+v5Score*0.4) + 形态加分(bestScore*0.5)
+ * 形态检测: 12形态竞争(旗形/布林/通道/多头加速/量价齐升/多头启动/平台突破/支撑反弹/零轴金叉/缩量突破/小阳蓄力/缺口不补)
  * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有18天 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -730,28 +730,49 @@ function calcPatternScore(klines) {
     detectedPatterns.push("量价齐升")
   }
 
-  // V85原有形态(作为补充加分, 不参与竞争)
+  // V90b: 辅助形态也参与评分竞争(确保更多股票能通过形态过滤)
   // 6. 多头排列启动
   var bas = detectBullAlignStart(klines)
-  if (bas.detected) detectedPatterns.push("多头启动")
+  if (bas.detected) {
+    if (bas.score > bestScore) { bestPattern = 'bull_align_start'; bestScore = bas.score }
+    detectedPatterns.push("多头启动")
+  }
   // 7. 放量突破平台
   var vb = detectVolumeBreakout(klines)
-  if (vb.detected) detectedPatterns.push("平台突破")
+  if (vb.detected) {
+    if (vb.score > bestScore) { bestPattern = 'vol_breakout'; bestScore = vb.score }
+    detectedPatterns.push("平台突破")
+  }
   // 8. 回踩支撑反弹
   var sb = detectSupportBounce(klines)
-  if (sb.detected) detectedPatterns.push("支撑反弹")
+  if (sb.detected) {
+    if (sb.score > bestScore) { bestPattern = 'support_bounce'; bestScore = sb.score }
+    detectedPatterns.push("支撑反弹")
+  }
   // 9. MACD零轴上方金叉
   var mc = detectMACDZeroAboveCross(klines)
-  if (mc.detected) detectedPatterns.push("零轴金叉")
+  if (mc.detected) {
+    if (mc.score > bestScore) { bestPattern = 'macd_zero_cross'; bestScore = mc.score }
+    detectedPatterns.push("零轴金叉")
+  }
   // 10. 缩量回调后放量突破
   var sp = detectShrinkPullbackBreakout(klines)
-  if (sp.detected) detectedPatterns.push("缩量突破")
+  if (sp.detected) {
+    if (sp.score > bestScore) { bestPattern = 'shrink_breakout'; bestScore = sp.score }
+    detectedPatterns.push("缩量突破")
+  }
   // 11. 连续小阳线蓄力
   var cs = detectConsecutiveSmallYang(klines)
-  if (cs.detected) detectedPatterns.push("小阳蓄力")
+  if (cs.detected) {
+    if (cs.score > bestScore) { bestPattern = 'small_yang'; bestScore = cs.score }
+    detectedPatterns.push("小阳蓄力")
+  }
   // 12. 跳空缺口不补
   var gu = detectGapUpHold(klines)
-  if (gu.detected) detectedPatterns.push("缺口不补")
+  if (gu.detected) {
+    if (gu.score > bestScore) { bestPattern = 'gap_hold'; bestScore = gu.score }
+    detectedPatterns.push("缺口不补")
+  }
 
   return { bestPattern: bestPattern, bestScore: bestScore, detectedPatterns: detectedPatterns }
 }
@@ -1025,10 +1046,9 @@ async function runStrongPicker(topN, force) {
     var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
     var v10Score = blendedScore
 
-    // === V90b: 形态过滤 (必须有形态得分才保留, 评分不变) ===
+    // === V90b: 形态检测 (12形态竞争, 有形态加分, 无形态也保留) ===
     var patternResult = klines ? calcPatternScore(klines) : { bestPattern: 'none', bestScore: 0, detectedPatterns: [] }
-    if ((patternResult.bestScore || 0) <= 0) continue  // V90b: 无形态则跳过
-
+    var patternBestScore = patternResult.bestScore || 0
     var patternReasons = patternResult.detectedPatterns || []
     // 从patternResult推断各形态标签
     var hasFlagBreakout = patternResult.bestPattern === 'flag_breakout'
@@ -1037,8 +1057,10 @@ async function runStrongPicker(topN, force) {
     var hasVolPriceAccel = patternResult.bestPattern === 'vol_price_accel'
     var hasBollSqueeze = patternResult.bestPattern === 'boll_squeeze'
 
-    // V90b: rankingScore = blendedScore (jztz_v17评分, 形态仅做过滤不影响评分)
-    var rankingScore = blendedScore
+    // V90b: rankingScore = blendedScore + 形态加分(有形态的排名靠前, 无形态的也能选上)
+    // 形态加分 = bestScore * 0.5 (比V89的2.0温和, 避免形态主导排名)
+    var patternBonus = Math.round(patternBestScore * 0.5)
+    var rankingScore = blendedScore + patternBonus
     if (rankingScore < 40) continue  // V90b: 最低分40
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
@@ -1109,7 +1131,7 @@ async function runStrongPicker(topN, force) {
         atrMultiplier: 1.3,
         atrTrailingMultiplier: 0.5,
         trailingRules: [{ profitPct: 5, trailingPct: 1.5 }, { profitPct: 8, trailingPct: 2.5 }, { profitPct: 12, trailingPct: 3.5 }],
-        description: "V90b: jztz_v17评分(blendedScore)+形态过滤(5形态竞争)+ATR1.3x止盈+0.5xATR追踪+18天持仓"
+        description: "V90b: jztz_v17评分+形态加分(12形态竞争,bestScore*0.5)+ATR1.3x止盈+0.5xATR追踪+18天持仓"
       },
       buySell: buySell,
       signals: buildSignalTags({
@@ -1122,7 +1144,7 @@ async function runStrongPicker(topN, force) {
     })
   }
 
-  // V90b: 用rankingScore(=blendedScore)排序, 形态仅过滤不影响评分
+  // V90b: 用rankingScore排序(blendedScore+形态加分), 有形态的排名靠前
   results.sort(function(a, b) { return b.rankingScore - a.rankingScore })
 
   var finalResults
