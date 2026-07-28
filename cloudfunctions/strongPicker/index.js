@@ -5,7 +5,8 @@
  * 核心形态: boll_squeeze + flag_breakout + 上升通道突破 + 多头排列加速 + 量价齐升加速
  * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉 + MA20上方 + 连涨<=4天
  * 评分逻辑: techScore(v31*0.75+v10*0.25) + 形态分(patternScore*2.0) + 温和涨幅加分
- * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有18天 + 连涨<=4天 */
+ * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有18天 + 连涨<=4天
+ * 过滤策略: RSI<=60硬过滤 + 其余回测条件(MACD金叉/MA20上方/涨幅1-2.5%/量比>=1.2)降级为bonus加分 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
@@ -1012,22 +1013,11 @@ async function runStrongPicker(topN, force) {
     // === V88: techScore权重对齐回测 (v31*0.75 + v10*0.25) ===
     var techScoreV88 = v31Score * 0.75 + v10Score * 0.25
 
-    // === V88: 硬过滤条件 (对齐回测v88_new_h18_a13_t05) ===
-    // MA斜率硬过滤
-    if (tech && tech.ma5Slope !== undefined && tech.ma5Slope < 0.1) continue  // V88: ma5Min=0.1
-    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope < 0.02) continue  // V88: ma10Min=0.02
-    // 涨幅范围硬过滤
+    // === V88: 核心硬过滤 (连涨<=4天 + RSI<=60, 避免追高和超买) ===
+    // 注意: 回测用硬过滤(ma5Min/chgMin/chgMax/vrMin/confirmMACD/confirmAboveMA20),
+    // 但云函数候选池仅80只, 全部硬过滤可能返回空结果, 因此降级为bonus加分
     var chgPct = stock.changePct || 0
-    if (chgPct < 1) continue  // V88: chgMin=1
-    if (chgPct > 2.5) continue  // V88: chgMax=2.5
-    // 量比硬过滤
-    if (volumeRatio < 1.2) continue  // V88: vrMin=1.2
-    // RSI硬过滤
-    if (rsi > 0 && rsi > 60) continue  // V88: rsiMax=60
-    // MACD金叉硬过滤
-    if (!goldenCross) continue  // V88: confirmMACD=true
-    // MA20上方硬过滤
-    if (tech && tech.ma20 && stock.price <= tech.ma20) continue  // V88: confirmAboveMA20=true
+    if (rsi > 0 && rsi > 60) continue  // V88: rsiMax=60 硬过滤(超买风险)
 
     // === Adaptive market environment ===
     var simpleMktEnv = calcSimpleMarketEnv(marketEnv)
@@ -1041,24 +1031,26 @@ async function runStrongPicker(topN, force) {
       continue  // V88: 连涨超过4天，跳过（追高风险过大）
     }
 
-    // === Bonus scoring (former V79 hard filters -> bonus items) ===
+    // === Bonus scoring (V88: 回测硬过滤降级为bonus, 确保候选池不为空) ===
     var bonusScore = 0
 
-    // MACD golden cross bonus (was hard filter -> +5)
+    // V88: MACD金叉加分 (回测硬过滤, 云函数降级为bonus+8)
     var macdConfirmed = goldenCross
-    if (macdConfirmed) bonusScore += 5
+    if (macdConfirmed) bonusScore += 8
+    else bonusScore -= 3  // V88: 无金叉扣分
 
-    // Above MA20 bonus (was hard filter -> +3)
+    // V88: MA20上方加分 (回测硬过滤, 云函数降级为bonus+6)
     var aboveMA20 = tech && tech.ma20 ? (stock.price > tech.ma20) : true
-    if (aboveMA20) bonusScore += 3
+    if (aboveMA20) bonusScore += 6
+    else bonusScore -= 2  // V88: MA20下方扣分
 
     // BOLL position bonus (was hard filter -> +3)
     if (bollPosition <= 0.85) bonusScore += 3
     else if (bollPosition > 0.85 && bollPosition <= 0.95) bonusScore += 1
 
-    // MA slope bonus (was hard filter -> +3)
-    if (tech && tech.ma5Slope !== undefined && tech.ma5Slope >= 0.1) bonusScore += 2
-    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope >= 0.02) bonusScore += 1
+    // V88: MA斜率加分 (回测硬过滤, 云函数降级为bonus)
+    if (tech && tech.ma5Slope !== undefined && tech.ma5Slope >= 0.1) bonusScore += 4  // V88: ma5Min=0.1
+    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope >= 0.02) bonusScore += 2  // V88: ma10Min=0.02
 
 
     // V88: 旗形突破已移入calcPatternScore竞争机制，此处不再独立加分
@@ -1081,15 +1073,18 @@ async function runStrongPicker(topN, force) {
     // V88: boll_squeeze在回测中通过bonusScore加2分(保持与V84一致, 不参与pattern竞争)
     if (hasBollSqueeze) bonusScore += 2
 
-    // Change 1-2.5% bonus (already enforced by hard filter, kept for scoring consistency)
-    if (chgPct >= 1 && chgPct <= 2.5) bonusScore += 3
+    // V88: 温和涨幅1-2.5%加分 (回测硬过滤, 云函数降级为bonus+6)
+    if (chgPct >= 1 && chgPct <= 2.5) bonusScore += 6
+    else if (chgPct > 2.5 && chgPct <= 4) bonusScore += 2
+    else if (chgPct < 1 && chgPct >= 0.5) bonusScore += 1
 
-    // RSI bonus (was hard filter RSI<=60 -> +2)
-    if (rsi > 0 && rsi <= 60) bonusScore += 2
-    else if (rsi > 70) bonusScore -= 3
+    // V88: RSI加分 (RSI<=60硬过滤已保留, 此处bonus细化)
+    if (rsi > 0 && rsi <= 50) bonusScore += 3
+    else if (rsi > 0 && rsi <= 60) bonusScore += 1
 
-    // Volume ratio bonus (was hard filter >=1.2 -> +2)
-    if (volumeRatio >= 1.2) bonusScore += 2
+    // V88: 量比加分 (回测vrMin=1.2硬过滤, 云函数降级为bonus+4)
+    if (volumeRatio >= 1.2) bonusScore += 4
+    else if (volumeRatio >= 1.0) bonusScore += 1
 
     // VP divergence penalty (was hard filter -> -8)
     var vpFiltered = false
