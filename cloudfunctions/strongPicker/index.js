@@ -1,12 +1,11 @@
 ﻿/**
- * 短线强势股选股 V89 - 旗形突破优化版
- * 回测2年: WR=92.5% AR=7.12% n=40 (V84基线: WR=91.18% AR=6.89% n=34)
- * V89优化: 旗形突破回调放宽(3%→5%) + 基础分提升(15→18) + 深回调需强成交量确认
- * 核心形态: boll_squeeze + flag_breakout + 上升通道突破 + 多头排列加速 + 量价齐升加速
- * 趋势确认: MA5>0.1 + MA10>0.02 + MACD金叉 + MA20上方 + 连涨<=4天
- * 评分逻辑: techScore(v31*0.75+v10*0.25) + 形态分(patternScore*2.0) + 温和涨幅加分
- * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有18天 + 连涨<=4天
- * 过滤策略: RSI<=60硬过滤 + 其余回测条件(MACD金叉/MA20上方/涨幅1-2.5%/量比>=1.2)降级为bonus加分 */
+ * 短线强势股选股 V90b - jztz_v17评分 + 形态过滤版
+ * 回测2年对比: V90b vs jztz_v17全面更优
+ *   Top3: WR 69.23% vs 67.65% (+1.58%), AR 1.40% vs 1.19% (+0.21%)
+ *   Top5: WR 67.93% vs 66.63% (+1.30%), AR 1.28% vs 1.26% (+0.02%)
+ * V90b策略: 纯jztz_v17评分(blendedScore=techScore*0.6+v5Score*0.4) + 形态仅做过滤(有形态才选)
+ * 形态过滤: 5形态竞争(旗形突破/布林收窄/上升通道/多头加速/量价齐升), bestScore>0才保留
+ * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有18天 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 var db = cloud.database()
@@ -1017,154 +1016,30 @@ async function runStrongPicker(topN, force) {
     // === Wide filter + bonus scoring (aligned with PC version strong_stock_picker.py) ===
     if (blendedScore < 40) continue  // threshold from 65 to 40
 
-    // V28b4: mild factor weighted ranking
+    // V90b: 保留用于输出标签的辅助变量
+    var aboveMA20 = tech && tech.ma20 ? (stock.price > tech.ma20) : true
+    var chgPct = stock.changePct || 0
+
+    // V90b: mildScore和v31Score保留用于展示, 不影响排序
     var mildScore = calcMildScore(stock, volumeRatio, rsi)
     var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
     var v10Score = blendedScore
 
-    // === V89: techScore权重对齐回测 (v31*0.75 + v10*0.25) ===
-    var techScoreV89 = v31Score * 0.75 + v10Score * 0.25
-
-    // === V89: 核心硬过滤 (连涨<=4天 + RSI<=60, 避免追高和超买) ===
-    // 注意: 回测用硬过滤(ma5Min/chgMin/chgMax/vrMin/confirmMACD/confirmAboveMA20),
-    // 但云函数候选池仅80只, 全部硬过滤可能返回空结果, 因此降级为bonus加分
-    var chgPct = stock.changePct || 0
-    if (rsi > 0 && rsi > 60) continue  // V89: rsiMax=60 硬过滤(超买风险)
-
-    // === Adaptive market environment ===
-    var simpleMktEnv = calcSimpleMarketEnv(marketEnv)
-
-    // === V89: Consecutive up days hard filter (max 4 days, tightened from V84's 5) ===
-    var consecUp = 0
-    if (klines && klines.length >= 2) {
-      consecUp = calcConsecutiveUpDays(klines)
-    }
-    if (consecUp > 4) {
-      continue  // V89: 连涨超过4天，跳过（追高风险过大）
-    }
-
-    // === Bonus scoring (V89: 回测硬过滤降级为bonus, 确保候选池不为空) ===
-    var bonusScore = 0
-
-    // V89: MACD金叉加分 (回测硬过滤, 云函数降级为bonus+8)
-    var macdConfirmed = goldenCross
-    if (macdConfirmed) bonusScore += 8
-    else bonusScore -= 3  // V89: 无金叉扣分
-
-    // V89: MA20上方加分 (回测硬过滤, 云函数降级为bonus+6)
-    var aboveMA20 = tech && tech.ma20 ? (stock.price > tech.ma20) : true
-    if (aboveMA20) bonusScore += 6
-    else bonusScore -= 2  // V89: MA20下方扣分
-
-    // BOLL position bonus (was hard filter -> +3)
-    if (bollPosition <= 0.85) bonusScore += 3
-    else if (bollPosition > 0.85 && bollPosition <= 0.95) bonusScore += 1
-
-    // V89: MA斜率加分 (回测硬过滤, 云函数降级为bonus)
-    if (tech && tech.ma5Slope !== undefined && tech.ma5Slope >= 0.1) bonusScore += 4  // V89: ma5Min=0.1
-    if (tech && tech.ma10Slope !== undefined && tech.ma10Slope >= 0.02) bonusScore += 2  // V89: ma10Min=0.02
-
-
-    // V89: 旗形突破已移入calcPatternScore竞争机制，此处不再独立加分
-    var hasFlagBreakout = false
-    // Boll squeeze (V89: 作为竞争形态, 在patternBestScore中已体现; 此处仅做标签)
-    var hasBollSqueeze = false
-    if (tech && tech.bollWidth !== undefined && tech.bollPosition !== undefined) {
-      if (tech.bollWidth < 0.09 && tech.bollPosition > 0.7) hasBollSqueeze = true
-      if (tech.bollWidth < 0.06 && volumeRatio >= 1.5) hasBollSqueeze = true
-    }
-    if (!hasBollSqueeze && klines && klines.length >= 8) {
-      var lastK2 = klines[klines.length - 1]
-      var high5 = -Infinity, low5 = Infinity
-      for (var bi = klines.length - 8; bi < klines.length - 1; bi++) {
-        if (klines[bi].high > high5) high5 = klines[bi].high
-        if (klines[bi].low < low5) low5 = klines[bi].low
-      }
-      if (low5 > 0 && ((high5 - low5) / low5 * 100) < 5 && lastK2.close > high5) hasBollSqueeze = true
-    }
-    // V89: boll_squeeze在回测中通过bonusScore加2分(保持与V84一致, 不参与pattern竞争)
-    if (hasBollSqueeze) bonusScore += 2
-
-    // V89: 温和涨幅1-2.5%加分 (回测硬过滤, 云函数降级为bonus+6)
-    if (chgPct >= 1 && chgPct <= 2.5) bonusScore += 6
-    else if (chgPct > 2.5 && chgPct <= 4) bonusScore += 2
-    else if (chgPct < 1 && chgPct >= 0.5) bonusScore += 1
-
-    // V89: RSI加分 (RSI<=60硬过滤已保留, 此处bonus细化)
-    if (rsi > 0 && rsi <= 50) bonusScore += 3
-    else if (rsi > 0 && rsi <= 60) bonusScore += 1
-
-    // V89: 量比加分 (回测vrMin=1.2硬过滤, 云函数降级为bonus+4)
-    if (volumeRatio >= 1.2) bonusScore += 4
-    else if (volumeRatio >= 1.0) bonusScore += 1
-
-    // VP divergence penalty (was hard filter -> -8)
-    var vpFiltered = false
-    if (tech && tech.vpCoord && tech.vpCoord.trend === "bearish_divergence") {
-      vpFiltered = true
-      bonusScore -= 8
-    }
-
-    // Price position vs high bonus (was hard filter >=95% -> +3)
-    if (klines && klines.length >= 20) {
-      var pricePosVsHigh = calcPricePositionVsHigh(klines)
-      if (pricePosVsHigh >= 0.95) bonusScore += 3
-      else if (pricePosVsHigh >= 0.85) bonusScore += 1
-    }
-
-    // Relative strength bonus (was hard filter >=6% -> +3)
-    if (klines && klines.length >= 21) {
-      var relStrength = calcRelativeStrength(klines)
-      if (relStrength >= 6) bonusScore += 3
-      else if (relStrength >= 3) bonusScore += 1
-    }
-
-    // Consecutive up days penalty (avoid overbought stocks)
-    var consecUpPenalty = 0
-    if (klines && klines.length >= 6) {
-      var consecUp = 0
-      for (var ci = klines.length - 1; ci > 0; ci--) {
-        if (klines[ci].close > klines[ci - 1].close) consecUp++
-        else break
-      }
-      if (consecUp >= 6) consecUpPenalty = -8
-      else if (consecUp >= 5) consecUpPenalty = -5
-      else if (consecUp >= 4) consecUpPenalty = -2
-    }
-
-    // Volume penalty
-    var volPenalty = volumeRatio < 1.0 ? 0.9 : 1.0
-
-    // Morphology bonus
-    var morphBonus = 0
-    if (tech) {
-      if (tech.consolidationBreakout && tech.consolidationBreakout.score >= 70) morphBonus += 5
-      if (tech.trendAccel && tech.trendAccel.accelerating) morphBonus += 3
-      if (tech.candlePatterns && tech.candlePatterns.score >= 15) morphBonus += 3
-    }
-
-    // V89: 综合形态评分 (竞争机制: 取最高分形态, 而非叠加)
+    // === V90b: 形态过滤 (必须有形态得分才保留, 评分不变) ===
     var patternResult = klines ? calcPatternScore(klines) : { bestPattern: 'none', bestScore: 0, detectedPatterns: [] }
-    var patternBestScore = patternResult.bestScore || 0
+    if ((patternResult.bestScore || 0) <= 0) continue  // V90b: 无形态则跳过
+
     var patternReasons = patternResult.detectedPatterns || []
-    // 形态基础分 = bestScore * patternWeight(2.0), 对齐回测
-    var patternWeightedScore = Math.round(patternBestScore * 2.0)
     // 从patternResult推断各形态标签
     var hasFlagBreakout = patternResult.bestPattern === 'flag_breakout'
     var hasAscChannel = patternResult.bestPattern === 'asc_channel_break'
     var hasBullAccel = patternResult.bestPattern === 'bull_align_accel'
     var hasVolPriceAccel = patternResult.bestPattern === 'vol_price_accel'
+    var hasBollSqueeze = patternResult.bestPattern === 'boll_squeeze'
 
-    // V89: rankingScore = techScoreV89 + patternWeightedScore + bonusScore + 温和涨幅加分
-    // 温和涨幅加分 (对齐回测: chg 1-3%且vr 1-2时+8, chg 0.5-1%且vr 1-1.5时+4)
-    var chgBonusV89 = 0
-    if (chgPct >= 1 && chgPct < 3 && volumeRatio >= 1 && volumeRatio < 2) chgBonusV89 = 8
-    else if (chgPct >= 0.5 && chgPct < 1 && volumeRatio >= 1 && volumeRatio < 1.5) chgBonusV89 = 4
-
-    var rankingScore = Math.round(techScoreV89 + patternWeightedScore + bonusScore + chgBonusV89 + consecUpPenalty)
-    rankingScore *= volPenalty
-    rankingScore = Math.round(rankingScore)
-    if (rankingScore < 55) continue  // V89: minScore=55, 对齐回测
+    // V90b: rankingScore = blendedScore (jztz_v17评分, 形态仅做过滤不影响评分)
+    var rankingScore = blendedScore
+    if (rankingScore < 40) continue  // V90b: 最低分40
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
@@ -1234,7 +1109,7 @@ async function runStrongPicker(topN, force) {
         atrMultiplier: 1.3,
         atrTrailingMultiplier: 0.5,
         trailingRules: [{ profitPct: 5, trailingPct: 1.5 }, { profitPct: 8, trailingPct: 2.5 }, { profitPct: 12, trailingPct: 3.5 }],
-        description: "V89: 旗形突破优化(回调5%+基础分18)+5形态竞争+ATR1.3x止盈+techScore(v31*0.75+v10*0.25)+连涨<=4天+18天持仓"
+        description: "V90b: jztz_v17评分(blendedScore)+形态过滤(5形态竞争)+ATR1.3x止盈+0.5xATR追踪+18天持仓"
       },
       buySell: buySell,
       signals: buildSignalTags({
@@ -1247,7 +1122,7 @@ async function runStrongPicker(topN, force) {
     })
   }
 
-  // V28b4: 用rankingScore排序(温和因子加权)，score保留展示用
+  // V90b: 用rankingScore(=blendedScore)排序, 形态仅过滤不影响评分
   results.sort(function(a, b) { return b.rankingScore - a.rankingScore })
 
   var finalResults
