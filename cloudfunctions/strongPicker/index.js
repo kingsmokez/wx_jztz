@@ -1,10 +1,9 @@
 ﻿/**
- * 短线强势股选股 V90b - jztz_v17评分 + 形态加分版
- * 回测2年对比: V90b vs jztz_v17全面更优
- *   Top3: WR 69.23% vs 67.65% (+1.58%), AR 1.40% vs 1.19% (+0.21%)
- *   Top5: WR 67.93% vs 66.63% (+1.30%), AR 1.28% vs 1.26% (+0.02%)
- * V90b策略: jztz_v17评分(blendedScore=techScore*0.6+v5Score*0.4) + 形态加分(bestScore*0.5)
- * 形态检测: 12形态竞争(旗形/布林/通道/多头加速/量价齐升/多头启动/平台突破/支撑反弹/零轴金叉/缩量突破/小阳蓄力/缺口不补)
+ * 短线强势股选股 V90c - 技术面排名+形态加分+市值偏好
+ * V90b问题: blendedScore排名导致大盘蓝筹霸榜(茅台/招行), 短线收益无保证
+ * V90c修复: blendedScore仅做门槛过滤(>=40), 排名用techScore+形态加分+市值偏好
+ * 形态加分: bestScore*1.5 (12形态全参与竞争)
+ * 市值偏好: 30-200亿+8分, >500亿-3分, >1000亿-8分 (偏好中小盘弹性)
  * 退出策略: ATR止盈(1.3xATR目标 + 0.5xATR跟踪止损) + 最大持有18天 */
 var cloud = require('wx-server-sdk')
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -1033,35 +1032,42 @@ async function runStrongPicker(topN, force) {
       if (er) { v5Score = er.v5Score || 50; v5Reasons = (er.v5Reasons || []).join(" | ") }
     } catch(e) {}
 
+    // V90c: blendedScore仅做门槛过滤(基本面不能太差), 排名以技术面+形态为主
     var blendedScore = Math.round(techScore * 0.6 + v5Score * 0.4)
-    // === Wide filter + bonus scoring (aligned with PC version strong_stock_picker.py) ===
-    if (blendedScore < 40) continue  // threshold from 65 to 40
+    if (blendedScore < 40) continue  // 门槛: 基本面不能太差
 
-    // V90b: 保留用于输出标签的辅助变量
+    // V90c: 保留用于输出标签的辅助变量
     var aboveMA20 = tech && tech.ma20 ? (stock.price > tech.ma20) : true
     var chgPct = stock.changePct || 0
 
-    // V90b: mildScore和v31Score保留用于展示, 不影响排序
+    // V90c: mildScore和v31Score保留用于展示, 不影响排序
     var mildScore = calcMildScore(stock, volumeRatio, rsi)
     var v31Score = calcTechScoreV31(stock, rsi, goldenCross, volumeRatio, bollPosition, stock.code, change5d, tech)
     var v10Score = blendedScore
 
-    // === V90b: 形态检测 (12形态竞争, 有形态加分, 无形态也保留) ===
+    // === V90c: 形态检测 (12形态竞争, 有形态加分, 无形态也保留) ===
     var patternResult = klines ? calcPatternScore(klines) : { bestPattern: 'none', bestScore: 0, detectedPatterns: [] }
     var patternBestScore = patternResult.bestScore || 0
     var patternReasons = patternResult.detectedPatterns || []
-    // 从patternResult推断各形态标签
     var hasFlagBreakout = patternResult.bestPattern === 'flag_breakout'
     var hasAscChannel = patternResult.bestPattern === 'asc_channel_break'
     var hasBullAccel = patternResult.bestPattern === 'bull_align_accel'
     var hasVolPriceAccel = patternResult.bestPattern === 'vol_price_accel'
     var hasBollSqueeze = patternResult.bestPattern === 'boll_squeeze'
 
-    // V90b: rankingScore = blendedScore + 形态加分(有形态的排名靠前, 无形态的也能选上)
-    // 形态加分 = bestScore * 0.5 (比V89的2.0温和, 避免形态主导排名)
-    var patternBonus = Math.round(patternBestScore * 0.5)
-    var rankingScore = blendedScore + patternBonus
-    if (rankingScore < 40) continue  // V90b: 最低分40
+    // V90c: rankingScore = techScore(技术面为主) + 形态加分(1.5倍) + 市值偏好
+    // 核心改变: 不用blendedScore排名(蓝筹基本面太强霸榜), 改用techScore排名
+    // blendedScore仅做门槛过滤(>=40), 排名以技术面+形态+市值为主
+    var patternBonus = Math.round(patternBestScore * 1.5)
+    // 市值偏好: 30-200亿最优(短线弹性好), >500亿扣分(大盘蓝筹波动小收益低)
+    var capBonus = 0
+    var cap = stock.circCap || 0
+    if (cap >= 30 && cap <= 200) capBonus = 8       // 中小盘最优
+    else if (cap > 200 && cap <= 500) capBonus = 3  // 中盘
+    else if (cap > 500 && cap <= 1000) capBonus = -3 // 大盘扣分
+    else if (cap > 1000) capBonus = -8              // 超大盘扣分
+    var rankingScore = Math.round(techScore) + patternBonus + capBonus
+    if (rankingScore < 40) continue  // V90c: 最低分40
     var pullbackStable = checkPullbackStable(maSignal, stock.low || 0, stock.price, stock.high || 0, stock.changePct || 0)
     var hasLimitUp = (stock.changePct || 0) >= getLimitPct(stock.code)
     var gentleVolume = volumeRatio >= 1.0 && volumeRatio <= 2.0
@@ -1131,7 +1137,7 @@ async function runStrongPicker(topN, force) {
         atrMultiplier: 1.3,
         atrTrailingMultiplier: 0.5,
         trailingRules: [{ profitPct: 5, trailingPct: 1.5 }, { profitPct: 8, trailingPct: 2.5 }, { profitPct: 12, trailingPct: 3.5 }],
-        description: "V90b: jztz_v17评分+形态加分(12形态竞争,bestScore*0.5)+ATR1.3x止盈+0.5xATR追踪+18天持仓"
+        description: "V90c: 技术面排名+形态加分(1.5x)+市值偏好(中小盘+8/大盘-8)+ATR1.3x止盈+18天持仓"
       },
       buySell: buySell,
       signals: buildSignalTags({
@@ -1144,7 +1150,7 @@ async function runStrongPicker(topN, force) {
     })
   }
 
-  // V90b: 用rankingScore排序(blendedScore+形态加分), 有形态的排名靠前
+  // V90c: 用rankingScore排序(techScore+形态+市值), 技术面为主避免蓝筹霸榜
   results.sort(function(a, b) { return b.rankingScore - a.rankingScore })
 
   var finalResults
