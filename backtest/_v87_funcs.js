@@ -353,6 +353,8 @@ function simulatePickV87(dayQuotes, klineMap, dateIdxMap, topN, marketEnv, strat
       patternResult = calcPatternScoreV87Supp(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
     } else if (patternMode === 'v87_bonus') {
       patternResult = calcPatternScoreV87Bonus(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
+    } else if (patternMode === 'v89') {
+      patternResult = calcPatternScoreV89(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
     } else if (patternMode === 'v84_all') {
       patternResult = calcPatternScoreV84(stock, klines, dateIdx, tech, volumeRatio, strategy.bollWidthMax)
     } else {
@@ -421,5 +423,79 @@ function simulatePickV87(dayQuotes, klineMap, dateIdxMap, topN, marketEnv, strat
     if (industryCount[ind] <= maxIndCount) result.push(scored[i])
   }
   return result
+}
+
+// V89: 旗形突破检测 - 放宽回调限制(3%->5%)增加触发频率
+function detectFlagBreakoutV89(klines, dateIdx) {
+  if (dateIdx < 12 || dateIdx >= klines.length) return { detected: false, score: 0 }
+  var recent = klines.slice(dateIdx - 11, dateIdx + 1)
+  if (recent.length < 10) return { detected: false, score: 0 }
+  var surgeIdx = -1, surgeChg = 0, surgeHigh = 0
+  for (var i = 1; i < recent.length - 2; i++) {
+    var chg = (recent[i].close - recent[i - 1].close) / recent[i - 1].close * 100
+    if (chg >= 5 && chg > surgeChg) { surgeIdx = i; surgeChg = chg; surgeHigh = recent[i].high }
+  }
+  if (surgeIdx < 0 || surgeIdx > recent.length - 4) return { detected: false, score: 0 }
+  var flagDays = 0
+  for (var i = surgeIdx + 1; i < recent.length - 1; i++) flagDays++
+  if (flagDays < 2 || flagDays > 7) return { detected: false, score: 0 }
+  var flagLow = Infinity
+  for (var i = surgeIdx + 1; i < recent.length - 1; i++) {
+    if (recent[i].low < flagLow) flagLow = recent[i].low
+  }
+  // V89: 回调限制从3%放宽到5% (surgeHigh*0.95 vs V84的0.97)
+  if (flagLow < surgeHigh * 0.95) return { detected: false, score: 0 }
+  var today = recent[recent.length - 1]
+  if (today.close <= surgeHigh) return { detected: false, score: 0 }
+  // V89: 基础分18 (比V84的15更高, 旗形突破是强趋势信号, 在竞争中更有优势)
+  var score = 18
+  if (surgeChg >= 5 && surgeChg <= 8) score += 3
+  if (flagDays >= 3 && flagDays <= 5) score += 3
+  // V89: 回调较深的旗形需要更强成交量确认
+  var pullbackPct = (surgeHigh - flagLow) / surgeHigh * 100
+  if (pullbackPct > 3) {
+    // 回调3-5%: 要求成交量放大1.5倍(比V84的1.3倍更严格)
+    var prevAvgVol = 0
+    for (var i = Math.max(0, recent.length - 6); i < recent.length - 1; i++) prevAvgVol += recent[i].volume
+    prevAvgVol /= Math.min(5, recent.length - 1)
+    if (prevAvgVol <= 0 || today.volume / prevAvgVol < 1.5) return { detected: false, score: 0 }
+    score += 4 // 深回调+强成交量: 额外加分(比V84多1分)
+  } else {
+    var prevAvgVol2 = 0
+    for (var i = Math.max(0, recent.length - 6); i < recent.length - 1; i++) prevAvgVol2 += recent[i].volume
+    prevAvgVol2 /= Math.min(5, recent.length - 1)
+    if (prevAvgVol2 > 0 && today.volume / prevAvgVol2 >= 1.3) score += 3
+  }
+  return { detected: true, score: score }
+}
+
+// V89: 综合形态评分 - V84形态 + V87新形态 + V89放宽版旗形
+function calcPatternScoreV89(stock, klines, dateIdx, tech, volumeRatio, bollWidthMax) {
+  var base = calcPatternScoreV81(stock, klines, dateIdx, tech, volumeRatio, bollWidthMax)
+  var bestPattern = base.pattern, bestScore = base.score
+
+  // V89放宽版旗形突破 (替代V84版)
+  var fb = detectFlagBreakoutV89(klines, dateIdx)
+  if (fb.detected && fb.score > bestScore) { bestPattern = 'flag_breakout'; bestScore = fb.score }
+
+  var db = detectDoubleBottomV84(klines, dateIdx)
+  if (db.detected && db.score > bestScore) { bestPattern = 'double_bottom'; bestScore = db.score }
+
+  var bc = detectBigCandleConfirmV84(klines, dateIdx)
+  if (bc.detected && bc.score > bestScore) { bestPattern = 'big_candle'; bestScore = bc.score }
+
+  var mb = detectMA20BounceV84(klines, dateIdx)
+  if (mb.detected && mb.score > bestScore) { bestPattern = 'ma20_bounce'; bestScore = mb.score }
+
+  var asc = detectAscendingChannelBreakout(klines, dateIdx)
+  if (asc.detected && asc.score > bestScore) { bestPattern = 'asc_channel_break'; bestScore = asc.score }
+
+  var bull = detectBullAlignAccel(klines, dateIdx, tech)
+  if (bull.detected && bull.score > bestScore) { bestPattern = 'bull_align_accel'; bestScore = bull.score }
+
+  var vp = detectVolPriceAccel(klines, dateIdx)
+  if (vp.detected && vp.score > bestScore) { bestPattern = 'vol_price_accel'; bestScore = vp.score }
+
+  return { pattern: bestPattern, score: bestScore, detectedPatterns: bestPattern !== base.pattern ? [bestPattern] : [] }
 }
 

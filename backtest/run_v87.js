@@ -667,6 +667,47 @@ V87_STRATEGIES['v88_h18_a13_t06'] = Object.assign({}, BASE_EXIT, {
   confirmMACD: true, confirmAboveMA20: true
 })
 
+// ===== V89: 旗形突破检测优化 (放宽回调3%->5% + 深回调需强成交量) =====
+// V89-O1: V89放宽旗形 + 5形态竞争 + 持仓18天 + ATR1.3 + Trail0.5
+V87_STRATEGIES['v89_flag_h18_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v89', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V89-O2: V89放宽旗形 + 仅旗形+BOLL + 持仓18天 + ATR1.3 + Trail0.5
+V87_STRATEGIES['v89_flag_bf_h18_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v89', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ['boll_squeeze', 'flag_breakout'],
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V89-O3: V89放宽旗形 + 5形态 + 持仓15天 + ATR1.3 + Trail0.5 (更短持仓)
+V87_STRATEGIES['v89_flag_h15_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v89', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 15, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 1, chgMax: 2.5, vrMin: 1.2, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
+// V89-O4: V89放宽旗形 + 放宽涨幅0.5-3% + 持仓18天
+V87_STRATEGIES['v89_flag_wide_h18_a13_t05'] = Object.assign({}, BASE_EXIT, {
+  patternMode: 'v89', atrExit: true, atrMultiplier: 1.3, atrTrailingMultiplier: 0.5,
+  maxHoldDays: 18, maxConsecUp: 4,
+  ma5Min: 0.1, ma10Min: 0.02, requirePattern: ALL_V87_PATS,
+  minScore: 55, patternWeight: 2.0, bollWidthMax: 0.09,
+  chgMin: 0.5, chgMax: 3, vrMin: 1.0, rsiMax: 60,
+  confirmMACD: true, confirmAboveMA20: true
+})
+
 // ===== 主流程 =====
 console.log('V87 Backtest: 上涨趋势信号增强+动态止盈优化')
 console.log('V84最佳基线: v84_boll_or_flag_atr13 WR=91.18% AR=6.89% n=34')
